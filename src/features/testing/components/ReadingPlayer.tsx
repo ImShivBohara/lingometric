@@ -6,23 +6,29 @@ import { useTestingStore } from '../store/testingStore'
 import { submitResponseAction, submitFinalAttemptAction } from '../actions'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Loader2, ArrowRight, BookOpen, Clock } from 'lucide-react'
+import { Loader2, ArrowRight, ArrowLeft, BookOpen, Clock } from 'lucide-react'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
+import QuestionNavigator from './QuestionNavigator'
 
 interface ReadingPlayerProps {
   attemptId: string
   initialQuestions: Question[]
+  initialAnswers?: Record<string, string>
 }
 
-export default function ReadingPlayer({ attemptId, initialQuestions }: ReadingPlayerProps) {
+export default function ReadingPlayer({
+  attemptId,
+  initialQuestions,
+  initialAnswers = {},
+}: ReadingPlayerProps) {
   const {
     questions,
     currentIndex,
-    selectedOption,
-    setQuestions,
-    setSelectedOption,
-    nextQuestion,
+    answers,
+    setSession,
+    setAnswer,
+    goToQuestion,
     reset,
   } = useTestingStore()
 
@@ -30,15 +36,12 @@ export default function ReadingPlayer({ attemptId, initialQuestions }: ReadingPl
   const [isPending, startTransition] = useTransition()
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
 
-  // Initialize store with questions
   useEffect(() => {
-    setQuestions(initialQuestions)
+    setSession(initialQuestions, initialAnswers)
     return () => reset()
-  }, [initialQuestions, setQuestions, reset])
+  }, [initialQuestions, initialAnswers, setSession, reset])
 
-  // Track elapsed time for the current question
   useEffect(() => {
-    // Reset timer asynchronously to avoid synchronous cascading renders warning
     const timeout = setTimeout(() => {
       setElapsedSeconds(0)
     }, 0)
@@ -54,6 +57,38 @@ export default function ReadingPlayer({ attemptId, initialQuestions }: ReadingPl
   }, [currentIndex])
 
   const currentQuestion = questions[currentIndex]
+  const selectedOption = currentQuestion ? answers[currentQuestion.id] || null : null
+  const answeredFlags = questions.map((question) => Boolean(answers[question.id]))
+  const unansweredCount = answeredFlags.filter((isAnswered) => !isAnswered).length
+
+  const persistCurrentAnswer = async () => {
+    if (!currentQuestion || !selectedOption) {
+      return { success: true as const }
+    }
+
+    const timeSpent = Math.max(1, elapsedSeconds)
+    return submitResponseAction(
+      attemptId,
+      currentQuestion.id,
+      selectedOption,
+      timeSpent
+    )
+  }
+
+  const handleNavigate = (nextIndex: number) => {
+    if (nextIndex === currentIndex || nextIndex < 0 || nextIndex >= questions.length) {
+      return
+    }
+
+    startTransition(async () => {
+      const response = await persistCurrentAnswer()
+      if (!response.success) {
+        toast.error(('error' in response && response.error) || 'Failed to save your answer.')
+        return
+      }
+      goToQuestion(nextIndex)
+    })
+  }
 
   if (!currentQuestion) {
     return (
@@ -63,7 +98,6 @@ export default function ReadingPlayer({ attemptId, initialQuestions }: ReadingPl
     )
   }
 
-  // Parse passage if it includes comprehension layout
   const text = currentQuestion.question_text
   const passageIndex = text.indexOf('Passage:')
   const questionIndex = text.indexOf('Question:')
@@ -73,13 +107,11 @@ export default function ReadingPlayer({ attemptId, initialQuestions }: ReadingPl
   if (passageIndex !== -1 && questionIndex !== -1) {
     passageText = text.substring(passageIndex + 8, questionIndex).trim()
     displayQuestionText = text.substring(questionIndex + 9).trim()
-    // Clean outer quotes from passage if present
     if (passageText.startsWith('"') && passageText.endsWith('"')) {
       passageText = passageText.substring(1, passageText.length - 1)
     }
   }
 
-  // Safely parse JSONB options array
   let optionsArray: string[] = []
   if (Array.isArray(currentQuestion.options)) {
     optionsArray = currentQuestion.options as string[]
@@ -97,25 +129,20 @@ export default function ReadingPlayer({ attemptId, initialQuestions }: ReadingPl
       return
     }
 
+    const isLast = currentIndex === questions.length - 1
     startTransition(async () => {
-      const timeSpent = Math.max(1, elapsedSeconds)
-      
-      // 1. Submit response to server actions
-      const response = await submitResponseAction(
-        attemptId,
-        currentQuestion.id,
-        selectedOption,
-        timeSpent
-      )
-
+      const response = await persistCurrentAnswer()
       if (!response.success) {
-        toast.error(response.error || 'Failed to submit response.')
+        toast.error(('error' in response && response.error) || 'Failed to submit response.')
         return
       }
 
-      // 2. Determine if it is the last question
-      const isLast = currentIndex === questions.length - 1
       if (isLast) {
+        if (unansweredCount > 0) {
+          toast.error(`Answer the remaining ${unansweredCount} question${unansweredCount === 1 ? '' : 's'} before submitting.`)
+          return
+        }
+
         const result = await submitFinalAttemptAction(attemptId)
         if (result.success) {
           router.push(`/test/${attemptId}/results`)
@@ -123,7 +150,7 @@ export default function ReadingPlayer({ attemptId, initialQuestions }: ReadingPl
           toast.error(result.error || 'Failed to submit final assessment. Please try again.')
         }
       } else {
-        nextQuestion()
+        goToQuestion(currentIndex + 1)
       }
     })
   }
@@ -132,7 +159,6 @@ export default function ReadingPlayer({ attemptId, initialQuestions }: ReadingPl
 
   return (
     <div className="w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8 flex flex-col min-h-screen">
-      {/* Top Navigation / Progress Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-2 text-sm text-slate-400">
           <BookOpen className="h-4 w-4 text-indigo-400" />
@@ -147,18 +173,23 @@ export default function ReadingPlayer({ attemptId, initialQuestions }: ReadingPl
         </div>
       </div>
 
-      {/* Progress Bar */}
-      <div className="w-full h-1.5 bg-slate-900 rounded-full mb-8 overflow-hidden">
-        <div 
-          className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 transition-all duration-300 ease-out" 
+      <div className="w-full h-1.5 bg-slate-900 rounded-full mb-6 overflow-hidden">
+        <div
+          className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 transition-all duration-300 ease-out"
           style={{ width: `${progressPercent}%` }}
         />
       </div>
 
-      {/* Assessment Body - Split Panel if passage exists */}
+      <QuestionNavigator
+        total={questions.length}
+        currentIndex={currentIndex}
+        answered={answeredFlags}
+        onSelect={handleNavigate}
+        disabled={isPending}
+      />
+
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mb-8">
         {passageText ? (
-          /* Passage View Left Panel */
           <Card className="lg:col-span-6 border-slate-900 bg-slate-900/20 backdrop-blur-sm text-slate-100 min-h-[400px]">
             <CardHeader className="border-b border-slate-900">
               <span className="text-xs text-indigo-400 font-semibold tracking-wider uppercase">Reading Passage</span>
@@ -171,7 +202,6 @@ export default function ReadingPlayer({ attemptId, initialQuestions }: ReadingPl
           </Card>
         ) : null}
 
-        {/* Question & Options Right Panel */}
         <Card className={`border-slate-800 bg-slate-900/40 backdrop-blur-sm text-slate-100 ${passageText ? 'lg:col-span-6' : 'lg:col-span-8 lg:col-start-2'} min-h-[400px] flex flex-col justify-between`}>
           <div>
             <CardHeader>
@@ -189,7 +219,7 @@ export default function ReadingPlayer({ attemptId, initialQuestions }: ReadingPl
                 return (
                   <button
                     key={idx}
-                    onClick={() => setSelectedOption(option)}
+                    onClick={() => setAnswer(currentQuestion.id, option)}
                     disabled={isPending}
                     className={`w-full text-left p-4 rounded-xl border text-sm font-medium transition duration-200 flex items-center justify-between ${
                       isSelected
@@ -209,7 +239,16 @@ export default function ReadingPlayer({ attemptId, initialQuestions }: ReadingPl
             </CardContent>
           </div>
 
-          <div className="p-6 border-t border-slate-900 flex justify-end">
+          <div className="p-6 border-t border-slate-900 flex justify-between">
+            <Button
+              variant="outline"
+              onClick={() => handleNavigate(currentIndex - 1)}
+              disabled={isPending || currentIndex === 0}
+              className="border-slate-800 bg-slate-950/40 text-slate-300 hover:bg-slate-900 font-semibold px-4 py-5 rounded-xl"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Previous</span>
+            </Button>
             <Button
               onClick={handleNext}
               disabled={isPending || !selectedOption}

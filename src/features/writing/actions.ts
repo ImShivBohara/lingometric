@@ -1,8 +1,8 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { evaluateEssay } from '@/lib/gemini'
+import { assertModifiableAttempt, getOwnedAttempt } from '@/features/testing/attemptAccess'
 
 /**
  * Server action to submit an essay response and trigger AI scoring/evaluation.
@@ -12,32 +12,15 @@ export async function submitEssayAction(
   promptId: string,
   essayText: string
 ) {
-  const supabase = await createClient()
-
-  // 1. Get active user context
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return { success: false, error: 'Authentication required' }
+  const owned = await getOwnedAttempt(attemptId)
+  if (!owned.success) {
+    return { success: false, error: owned.error }
   }
 
-  // 2. Fetch the attempt to verify ownership and progress status
-  const { data: attempt, error: attemptError } = await supabase
-    .from('attempts')
-    .select('*')
-    .eq('id', attemptId)
-    .eq('user_id', user.id)
-    .single()
-
-  if (attemptError || !attempt) {
-    console.error('Failed to locate attempt:', attemptError?.message)
-    return { success: false, error: 'Failed to access test attempt' }
-  }
-
-  if (attempt.status !== 'IN_PROGRESS') {
-    return { success: false, error: 'This assessment attempt is already finalized' }
+  const { supabase, userId, attempt } = owned.data
+  const modifiable = assertModifiableAttempt(attempt, 'Writing')
+  if (!modifiable.success) {
+    return { success: false, error: modifiable.error }
   }
 
   // 3. Fetch writing prompt constraints for validation
@@ -112,6 +95,8 @@ export async function submitEssayAction(
         status: 'SUBMITTED',
       })
       .eq('id', attemptId)
+      .eq('user_id', userId)
+      .eq('status', 'IN_PROGRESS')
 
     if (attemptUpdateError) {
       console.error('Failed to finalize attempt:', attemptUpdateError.message)
@@ -122,7 +107,7 @@ export async function submitEssayAction(
     const { error: userUpdateError } = await supabase
       .from('users')
       .update({ current_cefr_level: evaluation.cefr_level })
-      .eq('id', user.id)
+      .eq('id', userId)
 
     if (userUpdateError) {
       console.error('Failed to sync student CEFR progress level:', userUpdateError.message)

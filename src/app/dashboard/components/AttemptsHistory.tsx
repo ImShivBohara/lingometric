@@ -1,12 +1,15 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useTransition } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { 
   Dialog, 
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogDescription 
+  DialogDescription,
+  DialogFooter
 } from '@/components/ui/dialog'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,15 +23,23 @@ import {
   AlertCircle,
   ThumbsUp,
   Lightbulb,
-  CornerDownRight
+  CornerDownRight,
+  Play,
+  XCircle,
+  ExternalLink,
+  Loader2
 } from 'lucide-react'
+import { toast } from 'sonner'
+import { discardAttemptAction } from '@/features/testing/actions'
+import { resolveAttemptSkill, getResumePath, AssessmentType } from '@/features/testing/attemptIdentity'
 
 // Extended attempt structure returned by Supabase joins
-interface ExtendedAttempt extends Attempt {
+export interface ExtendedAttempt extends Attempt {
   tests: Test | null
-  writing_evaluations: WritingEvaluation[]
+  writing_evaluations?: WritingEvaluation[]
   listening_responses?: { id: string }[]
   speaking_evaluations?: SpeakingEvaluation[]
+  responses?: { id: string }[]
 }
 
 interface AttemptsHistoryProps {
@@ -59,25 +70,20 @@ const formatDate = (dateString: string) => {
 }
 
 export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
-  const [activeTab, setActiveTab] = useState<'reading' | 'listening' | 'writing' | 'speaking'>('reading')
+  const router = useRouter()
+  const [activeTab, setActiveTab] = useState<'reading' | 'listening' | 'writing' | 'speaking' | 'unknown'>('reading')
   const [selectedEval, setSelectedEval] = useState<SelectedEvalState | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [discardAttemptId, setDiscardAttemptId] = useState<string | null>(null)
+  const [pendingAttemptId, setPendingAttemptId] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
 
-  // Classify attempts
-  const writingAttempts = attempts.filter(
-    (a) => a.writing_evaluations && a.writing_evaluations.length > 0
-  )
-  const listeningAttempts = attempts.filter(
-    (a) => a.listening_responses && a.listening_responses.length > 0
-  )
-  const speakingAttempts = attempts.filter(
-    (a) => a.speaking_evaluations && a.speaking_evaluations.length > 0
-  )
-  const readingAttempts = attempts.filter(
-    (a) => (!a.writing_evaluations || a.writing_evaluations.length === 0) &&
-           (!a.listening_responses || a.listening_responses.length === 0) &&
-           (!a.speaking_evaluations || a.speaking_evaluations.length === 0)
-  )
+  // Classify attempts using the unified, evidence-based skill resolver
+  const writingAttempts = attempts.filter((a) => resolveAttemptSkill(a) === 'Writing')
+  const listeningAttempts = attempts.filter((a) => resolveAttemptSkill(a) === 'Listening')
+  const speakingAttempts = attempts.filter((a) => resolveAttemptSkill(a) === 'Speaking')
+  const readingAttempts = attempts.filter((a) => resolveAttemptSkill(a) === 'Reading')
+  const unknownAttempts = attempts.filter((a) => resolveAttemptSkill(a) === 'Unknown')
 
   const handleOpenFeedback = (attempt: ExtendedAttempt, evaluation: WritingEvaluation) => {
     setSelectedEval({
@@ -103,7 +109,7 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
       essayText: evaluation.transcript || '',
       grammarScore: evaluation.grammar_score || 0,
       vocabularyScore: evaluation.vocabulary_score || 0,
-      coherenceScore: evaluation.pronunciation_score || 0, // map pronunciation to coherenceScore for reused grid
+      coherenceScore: evaluation.pronunciation_score || 0,
       fluencyScore: evaluation.fluency_score || 0,
       overallScore: evaluation.overall_score || 0,
       cefrLevel: evaluation.cefr_level || 'B1',
@@ -113,10 +119,147 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
     setIsModalOpen(true)
   }
 
+  const handleResume = (attempt: ExtendedAttempt) => {
+    const skill = resolveAttemptSkill(attempt)
+    if (skill === 'Unknown') {
+      toast.error('This attempt has an unknown assessment type and cannot be resumed.')
+      return
+    }
+    router.push(getResumePath(attempt.id, skill as AssessmentType))
+  }
+
+  const handleConfirmDiscard = (attemptId: string) => {
+    setPendingAttemptId(attemptId)
+    startTransition(async () => {
+      const result = await discardAttemptAction(attemptId)
+      setPendingAttemptId(null)
+      setDiscardAttemptId(null)
+      if (result.success) {
+        toast.success('Assessment attempt discarded.')
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Failed to discard attempt.')
+      }
+    })
+  }
+
+  const renderStatusBadge = (attempt: ExtendedAttempt) => {
+    const skill = resolveAttemptSkill(attempt)
+    return (
+      <div className="flex items-center gap-2">
+        {attempt.status === 'IN_PROGRESS' && (
+          <span className="text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">
+            In Progress
+          </span>
+        )}
+        {attempt.status === 'SUBMITTED' && (
+          <span className="text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">
+            Submitted
+          </span>
+        )}
+        {attempt.status === 'DISCARDED' && (
+          <span className="text-slate-400 bg-slate-800/60 border border-slate-700/60 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">
+            Discarded
+          </span>
+        )}
+        {skill === 'Unknown' && (
+          <span className="text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider">
+            Unknown Skill
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  const renderScoreAndActions = (attempt: ExtendedAttempt, skill: AssessmentType | 'Unknown') => {
+    const isSubmitted = attempt.status === 'SUBMITTED'
+    const isInProgress = attempt.status === 'IN_PROGRESS'
+    const isActionPending = isPending && pendingAttemptId === attempt.id
+
+    // Score display: 0 is a valid score and must display as '0', never 'N/A' or '—'
+    const scoreDisplay = isSubmitted && attempt.final_score !== null && attempt.final_score !== undefined
+      ? String(attempt.final_score)
+      : '—'
+    const cefrDisplay = isSubmitted && attempt.cefr_level ? attempt.cefr_level : '—'
+
+    return (
+      <div className="flex items-center space-x-6">
+        <div className="text-right">
+          <div className="font-bold text-indigo-400">{scoreDisplay}</div>
+          <div className="text-xs text-slate-500 uppercase tracking-wider">Score</div>
+        </div>
+        <div className="text-right">
+          <div className="font-bold text-emerald-400">{cefrDisplay}</div>
+          <div className="text-xs text-slate-500 uppercase tracking-wider">CEFR</div>
+        </div>
+
+        {isInProgress && (
+          <div className="flex items-center gap-2">
+            {skill !== 'Unknown' && (
+              <Button
+                size="sm"
+                onClick={() => handleResume(attempt)}
+                disabled={isActionPending}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 shadow-sm transition"
+              >
+                <Play className="h-3 w-3 fill-white" />
+                <span>Resume</span>
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setDiscardAttemptId(attempt.id)}
+              disabled={isActionPending}
+              className="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 transition"
+            >
+              <XCircle className="h-3 w-3" />
+              <span>Discard</span>
+            </Button>
+          </div>
+        )}
+
+        {isSubmitted && skill === 'Writing' && attempt.writing_evaluations?.[0] && (
+          <Button
+            onClick={() => handleOpenFeedback(attempt, attempt.writing_evaluations![0])}
+            variant="ghost"
+            size="sm"
+            className="bg-indigo-600/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-600 hover:text-white px-3 font-semibold transition"
+          >
+            <span>View AI Feedback</span>
+            <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+          </Button>
+        )}
+
+        {isSubmitted && skill === 'Speaking' && attempt.speaking_evaluations?.[0] && (
+          <Button
+            onClick={() => handleOpenSpeakingFeedback(attempt, attempt.speaking_evaluations![0])}
+            variant="ghost"
+            size="sm"
+            className="bg-indigo-600/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-600 hover:text-white px-3 font-semibold transition"
+          >
+            <span>View AI Feedback</span>
+            <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+          </Button>
+        )}
+
+        {isSubmitted && (skill === 'Reading' || skill === 'Listening') && (
+          <Link
+            href={`/test/${attempt.id}/results`}
+            className="inline-flex items-center text-xs font-semibold bg-indigo-600/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-600 hover:text-white px-3 py-1.5 rounded-lg transition"
+          >
+            <span>View Results</span>
+            <ExternalLink className="h-3 w-3 ml-1" />
+          </Link>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Tabs */}
-      <div className="flex border-b border-slate-900 bg-slate-950/40 p-1 rounded-xl w-fit">
+      <div className="flex flex-wrap gap-1 border-b border-slate-900 bg-slate-950/40 p-1 rounded-xl w-fit">
         <button
           onClick={() => setActiveTab('reading')}
           className={`px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition ${
@@ -125,7 +268,7 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          Reading History
+          Reading History ({readingAttempts.length})
         </button>
         <button
           onClick={() => setActiveTab('listening')}
@@ -135,7 +278,7 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          Listening History
+          Listening History ({listeningAttempts.length})
         </button>
         <button
           onClick={() => setActiveTab('writing')}
@@ -145,7 +288,7 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          Writing History
+          Writing History ({writingAttempts.length})
         </button>
         <button
           onClick={() => setActiveTab('speaking')}
@@ -155,8 +298,20 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          Speaking History
+          Speaking History ({speakingAttempts.length})
         </button>
+        {unknownAttempts.length > 0 && (
+          <button
+            onClick={() => setActiveTab('unknown')}
+            className={`px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition ${
+              activeTab === 'unknown'
+                ? 'bg-rose-600 text-white shadow'
+                : 'text-rose-400/80 hover:text-rose-300'
+            }`}
+          >
+            Unclassified ({unknownAttempts.length})
+          </button>
+        )}
       </div>
 
       {/* Reading History Tab */}
@@ -168,36 +323,24 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
                 <FileText className="h-12 w-12 text-slate-700 mb-4" />
                 <h3 className="font-semibold text-slate-300">No Reading attempts logged</h3>
                 <p className="text-slate-500 text-sm max-w-sm mt-1">
-                  You have not completed any Reading comprehension test attempts.
+                  You have not started or completed any Reading comprehension test attempts.
                 </p>
               </div>
             ) : (
               <div className="divide-y divide-slate-850">
                 {readingAttempts.map((attempt) => (
-                  <div key={attempt.id} className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                    <div className="space-y-1">
-                      <h4 className="font-semibold">{attempt.tests?.title || 'English Proficiency Assessment'}</h4>
-                      <div className="flex items-center space-x-2 text-xs text-slate-400 font-mono">
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span>{formatDate(attempt.started_at)}</span>
-                        {attempt.status === 'IN_PROGRESS' && (
-                          <span className="text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded text-[10px] uppercase font-bold">
-                            In Progress
-                          </span>
-                        )}
+                  <div key={attempt.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 first:pt-0 last:pb-0">
+                    <div className="space-y-1.5">
+                      <h4 className="font-semibold">{attempt.tests?.title || 'Reading Comprehension Assessment'}</h4>
+                      <div className="flex items-center space-x-3 text-xs text-slate-400 font-mono">
+                        <span className="flex items-center space-x-1">
+                          <Calendar className="h-3.5 w-3.5" />
+                          <span>{formatDate(attempt.started_at)}</span>
+                        </span>
+                        {renderStatusBadge(attempt)}
                       </div>
                     </div>
-
-                    <div className="flex items-center space-x-6">
-                      <div className="text-right">
-                        <div className="font-bold text-indigo-400">{attempt.final_score ?? '—'}</div>
-                        <div className="text-xs text-slate-500 uppercase tracking-wider">Score</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold text-emerald-400">{attempt.cefr_level || '—'}</div>
-                        <div className="text-xs text-slate-500 uppercase tracking-wider">CEFR</div>
-                      </div>
-                    </div>
+                    {renderScoreAndActions(attempt, 'Reading')}
                   </div>
                 ))}
               </div>
@@ -215,36 +358,24 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
                 <FileText className="h-12 w-12 text-slate-700 mb-4" />
                 <h3 className="font-semibold text-slate-300">No Listening attempts logged</h3>
                 <p className="text-slate-500 text-sm max-w-sm mt-1">
-                  You have not completed any Listening assessment attempts yet.
+                  You have not started or completed any Listening assessment attempts yet.
                 </p>
               </div>
             ) : (
               <div className="divide-y divide-slate-850">
                 {listeningAttempts.map((attempt) => (
-                  <div key={attempt.id} className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                    <div className="space-y-1">
+                  <div key={attempt.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 first:pt-0 last:pb-0">
+                    <div className="space-y-1.5">
                       <h4 className="font-semibold">{attempt.tests?.title || 'Listening Comprehension Assessment'}</h4>
-                      <div className="flex items-center space-x-2 text-xs text-slate-400 font-mono">
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span>{formatDate(attempt.started_at)}</span>
-                        {attempt.status === 'IN_PROGRESS' && (
-                          <span className="text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded text-[10px] uppercase font-bold">
-                            In Progress
-                          </span>
-                        )}
+                      <div className="flex items-center space-x-3 text-xs text-slate-400 font-mono">
+                        <span className="flex items-center space-x-1">
+                          <Calendar className="h-3.5 w-3.5" />
+                          <span>{formatDate(attempt.started_at)}</span>
+                        </span>
+                        {renderStatusBadge(attempt)}
                       </div>
                     </div>
-
-                    <div className="flex items-center space-x-6">
-                      <div className="text-right">
-                        <div className="font-bold text-indigo-400">{attempt.final_score ?? '—'}</div>
-                        <div className="text-xs text-slate-500 uppercase tracking-wider">Score</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold text-emerald-400">{attempt.cefr_level || '—'}</div>
-                        <div className="text-xs text-slate-500 uppercase tracking-wider">CEFR</div>
-                      </div>
-                    </div>
+                    {renderScoreAndActions(attempt, 'Listening')}
                   </div>
                 ))}
               </div>
@@ -267,42 +398,21 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
               </div>
             ) : (
               <div className="divide-y divide-slate-850">
-                {writingAttempts.map((attempt) => {
-                  const evalData = attempt.writing_evaluations?.[0]
-                  if (!evalData) return null
-
-                  return (
-                    <div key={attempt.id} className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                      <div className="space-y-1">
-                        <h4 className="font-semibold">Writing Assessment</h4>
-                        <div className="flex items-center space-x-2 text-xs text-slate-400 font-mono">
+                {writingAttempts.map((attempt) => (
+                  <div key={attempt.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 first:pt-0 last:pb-0">
+                    <div className="space-y-1.5">
+                      <h4 className="font-semibold">Writing Assessment</h4>
+                      <div className="flex items-center space-x-3 text-xs text-slate-400 font-mono">
+                        <span className="flex items-center space-x-1">
                           <Calendar className="h-3.5 w-3.5" />
                           <span>{formatDate(attempt.started_at)}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-6">
-                        <div className="text-right">
-                          <div className="font-bold text-indigo-400">{evalData.overall_score ?? '—'}</div>
-                          <div className="text-xs text-slate-500 uppercase tracking-wider">Score</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-bold text-emerald-400">{evalData.cefr_level || '—'}</div>
-                          <div className="text-xs text-slate-500 uppercase tracking-wider">CEFR</div>
-                        </div>
-                        <Button
-                          onClick={() => handleOpenFeedback(attempt, evalData)}
-                          variant="ghost"
-                          size="sm"
-                          className="bg-indigo-600/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-600 hover:text-white px-3 font-semibold transition"
-                        >
-                          <span>View AI Feedback</span>
-                          <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
-                        </Button>
+                        </span>
+                        {renderStatusBadge(attempt)}
                       </div>
                     </div>
-                  )
-                })}
+                    {renderScoreAndActions(attempt, 'Writing')}
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
@@ -323,47 +433,93 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
               </div>
             ) : (
               <div className="divide-y divide-slate-850">
-                {speakingAttempts.map((attempt) => {
-                  const evalData = attempt.speaking_evaluations?.[0]
-                  if (!evalData) return null
-
-                  return (
-                    <div key={attempt.id} className="py-4 flex items-center justify-between first:pt-0 last:pb-0">
-                      <div className="space-y-1">
-                        <h4 className="font-semibold">Speaking Assessment</h4>
-                        <div className="flex items-center space-x-2 text-xs text-slate-400 font-mono">
+                {speakingAttempts.map((attempt) => (
+                  <div key={attempt.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 first:pt-0 last:pb-0">
+                    <div className="space-y-1.5">
+                      <h4 className="font-semibold">Speaking Assessment</h4>
+                      <div className="flex items-center space-x-3 text-xs text-slate-400 font-mono">
+                        <span className="flex items-center space-x-1">
                           <Calendar className="h-3.5 w-3.5" />
                           <span>{formatDate(attempt.started_at)}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-6">
-                        <div className="text-right">
-                          <div className="font-bold text-indigo-400">{evalData.overall_score ?? '—'}</div>
-                          <div className="text-xs text-slate-500 uppercase tracking-wider">Score</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-bold text-emerald-400">{evalData.cefr_level || '—'}</div>
-                          <div className="text-xs text-slate-500 uppercase tracking-wider">CEFR</div>
-                        </div>
-                        <Button
-                          onClick={() => handleOpenSpeakingFeedback(attempt, evalData)}
-                          variant="ghost"
-                          size="sm"
-                          className="bg-indigo-600/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-600 hover:text-white px-3 font-semibold transition"
-                        >
-                          <span>View AI Feedback</span>
-                          <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
-                        </Button>
+                        </span>
+                        {renderStatusBadge(attempt)}
                       </div>
                     </div>
-                  )
-                })}
+                    {renderScoreAndActions(attempt, 'Speaking')}
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
         </Card>
       )}
+
+      {/* Unclassified / Unknown History Tab */}
+      {activeTab === 'unknown' && unknownAttempts.length > 0 && (
+        <Card className="bg-slate-900/30 border-slate-900 text-white">
+          <CardContent className="pt-6">
+            <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>
+                These legacy records do not have sufficient recorded evidence to verify their skill type. They are kept safe for auditing and cannot be resumed.
+              </span>
+            </div>
+            <div className="divide-y divide-slate-850">
+              {unknownAttempts.map((attempt) => (
+                <div key={attempt.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 first:pt-0 last:pb-0">
+                  <div className="space-y-1.5">
+                    <h4 className="font-semibold text-slate-300">Unclassified Legacy Assessment</h4>
+                    <div className="flex items-center space-x-3 text-xs text-slate-400 font-mono">
+                      <span className="flex items-center space-x-1">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>{formatDate(attempt.started_at)}</span>
+                      </span>
+                      {renderStatusBadge(attempt)}
+                    </div>
+                  </div>
+                  {renderScoreAndActions(attempt, 'Unknown')}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Discard Confirmation Dialog */}
+      <Dialog open={Boolean(discardAttemptId)} onOpenChange={(open) => !open && setDiscardAttemptId(null)}>
+        <DialogContent className="max-w-md bg-slate-900 border border-slate-800 text-slate-100 p-6 rounded-2xl shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              Discard Assessment Attempt?
+            </DialogTitle>
+            <DialogDescription className="text-slate-400 text-sm pt-2">
+              Are you sure you want to discard this unfinished assessment? It will be marked as discarded and you can start a fresh attempt. Existing recorded progress will be retained for history but will not count toward completed scores.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex justify-end gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDiscardAttemptId(null)}
+              disabled={isPending}
+              className="border-slate-800 text-slate-300 hover:bg-slate-800"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => discardAttemptId && handleConfirmDiscard(discardAttemptId)}
+              disabled={isPending}
+              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold flex items-center gap-2"
+            >
+              {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              <span>{isPending ? 'Discarding...' : 'Yes, Discard'}</span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Detailed Feedback Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>

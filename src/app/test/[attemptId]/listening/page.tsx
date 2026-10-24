@@ -2,6 +2,8 @@ import React from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import ListeningPlayer, { ListeningPassage } from '@/features/listening/components/ListeningPlayer'
+import { enforceAttemptPlayerAccess } from '@/features/testing/attemptAccess'
+import { Attempt } from '@/types/database.types'
 
 interface PageProps {
   params: Promise<{ attemptId: string }>
@@ -33,9 +35,7 @@ export default async function ListeningAttemptPage({ params }: PageProps) {
     redirect('/dashboard')
   }
 
-  if (attempt.status !== 'IN_PROGRESS') {
-    redirect(`/test/${attemptId}/results`)
-  }
+  enforceAttemptPlayerAccess(attempt as Attempt, 'Listening')
   // 3. Fetch Listening passages assigned to the active test
   let passages: ListeningPassage[] = []
 
@@ -157,11 +157,22 @@ export default async function ListeningAttemptPage({ params }: PageProps) {
     passages = legacyPassages
   }
 
+  const { data: savedResponses } = await supabase
+    .from('listening_responses')
+    .select('question_id, selected_answer')
+    .eq('attempt_id', attemptId)
+
+  const initialAnswers: Record<string, string> = {}
+  for (const response of savedResponses || []) {
+    initialAnswers[response.question_id] = response.selected_answer
+  }
+
   return (
     <div className="w-full min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center">
       <ListeningPlayer 
         attemptId={attemptId} 
-        passages={passages} 
+        passages={passages}
+        initialAnswers={initialAnswers}
       />
     </div>
   )

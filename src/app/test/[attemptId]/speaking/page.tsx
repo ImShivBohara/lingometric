@@ -2,6 +2,8 @@ import React from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import SpeakingPlayer from '@/features/speaking/components/SpeakingPlayer'
+import { enforceAttemptPlayerAccess } from '@/features/testing/attemptAccess'
+import { Attempt } from '@/types/database.types'
 
 interface PageProps {
   params: Promise<{ attemptId: string }>
@@ -33,9 +35,7 @@ export default async function SpeakingAttemptPage({ params }: PageProps) {
     redirect('/dashboard')
   }
 
-  if (attempt.status !== 'IN_PROGRESS') {
-    redirect(`/test/${attemptId}/results`)
-  }
+  enforceAttemptPlayerAccess(attempt as Attempt, 'Speaking')
 
   // 3. Fetch the Speaking section matching the active test context
   const { data: section, error: sectionError } = await supabase

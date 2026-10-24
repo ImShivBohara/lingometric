@@ -1,7 +1,7 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { assertModifiableAttempt, getOwnedAttempt } from '@/features/testing/attemptAccess'
 
 /**
  * Persists an individual listening response to the database.
@@ -12,18 +12,18 @@ export async function submitListeningResponseAction(
   selectedAnswer: string,
   timeTakenSeconds: number
 ) {
-  const supabase = await createClient()
-
-  // 1. Get current user context
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return { success: false, error: 'Authentication required' }
+  const owned = await getOwnedAttempt(attemptId)
+  if (!owned.success) {
+    return { success: false, error: owned.error }
   }
 
-  // 2. Retrieve the correct answer from the listening_questions table
+  const { supabase, attempt } = owned.data
+  const modifiable = assertModifiableAttempt(attempt, 'Listening')
+  if (!modifiable.success) {
+    return { success: false, error: modifiable.error }
+  }
+
+  // Retrieve the correct answer from the listening_questions table
   const { data: question, error: questionError } = await supabase
     .from('listening_questions')
     .select('correct_answer')
@@ -64,18 +64,18 @@ export async function submitListeningResponseAction(
  * Computes final listening scores, updates attempt status, and triggers revalidation.
  */
 export async function submitFinalListeningAction(attemptId: string) {
-  const supabase = await createClient()
-
-  // 1. Get current user context
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return { success: false, error: 'Authentication required' }
+  const owned = await getOwnedAttempt(attemptId)
+  if (!owned.success) {
+    return { success: false, error: owned.error }
   }
 
-  // 2. Fetch all responses for this attempt
+  const { supabase, userId, attempt } = owned.data
+  const modifiable = assertModifiableAttempt(attempt, 'Listening')
+  if (!modifiable.success) {
+    return { success: false, error: modifiable.error }
+  }
+
+  // Fetch all responses for this attempt
   const { data: responses, error: responsesError } = await supabase
     .from('listening_responses')
     .select('is_correct')
@@ -116,7 +116,8 @@ export async function submitFinalListeningAction(attemptId: string) {
       status: 'SUBMITTED',
     })
     .eq('id', attemptId)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
+    .eq('status', 'IN_PROGRESS')
 
   if (updateError) {
     console.error('Failed to finalize listening attempt:', updateError.message)
@@ -127,7 +128,7 @@ export async function submitFinalListeningAction(attemptId: string) {
   const { error: userUpdateError } = await supabase
     .from('users')
     .update({ current_cefr_level: cefrLevel })
-    .eq('id', user.id)
+    .eq('id', userId)
 
   if (userUpdateError) {
     console.error('Failed to sync user profile CEFR level:', userUpdateError.message)

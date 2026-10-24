@@ -17,6 +17,7 @@ import {
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { submitListeningResponseAction, submitFinalListeningAction } from '../actions'
+import QuestionNavigator from '@/features/testing/components/QuestionNavigator'
 
 export interface ListeningQuestion {
   id: string
@@ -41,11 +42,16 @@ export interface ListeningPassage {
 interface ListeningPlayerProps {
   attemptId: string
   passages: ListeningPassage[]
+  initialAnswers?: Record<string, string>
 }
 
 const WAVE_HEIGHTS = [14, 28, 20, 36, 10, 24, 32, 16, 30, 18, 34, 12, 26, 22, 38]
 
-export default function ListeningPlayer({ attemptId, passages }: ListeningPlayerProps) {
+export default function ListeningPlayer({
+  attemptId,
+  passages,
+  initialAnswers = {},
+}: ListeningPlayerProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -60,7 +66,7 @@ export default function ListeningPlayer({ attemptId, passages }: ListeningPlayer
   }, [passages])
 
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({})
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>(initialAnswers)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
 
   // Audio Playback states
@@ -177,6 +183,39 @@ export default function ListeningPlayer({ attemptId, passages }: ListeningPlayer
     }))
   }
 
+  const persistCurrentAnswer = async () => {
+    if (!currentQuestion) {
+      return { success: true as const }
+    }
+
+    const selectedOption = selectedOptions[currentQuestion.id]
+    if (!selectedOption) {
+      return { success: true as const }
+    }
+
+    return submitListeningResponseAction(
+      attemptId,
+      currentQuestion.id,
+      selectedOption,
+      Math.max(1, elapsedSeconds)
+    )
+  }
+
+  const handleNavigate = (nextIndex: number) => {
+    if (nextIndex === currentIndex || nextIndex < 0 || nextIndex >= allQuestions.length) {
+      return
+    }
+
+    startTransition(async () => {
+      const response = await persistCurrentAnswer()
+      if (!response.success) {
+        toast.error(response.error || 'Failed to record your answer. Please try again.')
+        return
+      }
+      setCurrentIndex(nextIndex)
+    })
+  }
+
   const handleNext = () => {
     if (!currentQuestion) return
     const selectedOption = selectedOptions[currentQuestion.id]
@@ -186,25 +225,22 @@ export default function ListeningPlayer({ attemptId, passages }: ListeningPlayer
       return
     }
 
+    const unansweredCount = allQuestions.filter((question) => !selectedOptions[question.id]).length
+    const isLast = currentIndex === allQuestions.length - 1
+
     startTransition(async () => {
-      const timeSpent = Math.max(1, elapsedSeconds)
-
-      // Submit individual response
-      const response = await submitListeningResponseAction(
-        attemptId,
-        currentQuestion.id,
-        selectedOption,
-        timeSpent
-      )
-
+      const response = await persistCurrentAnswer()
       if (!response.success) {
         toast.error(response.error || 'Failed to record your answer. Please try again.')
         return
       }
 
-      const isLast = currentIndex === allQuestions.length - 1
       if (isLast) {
-        // Finalize attempt
+        if (unansweredCount > 0) {
+          toast.error(`Answer the remaining ${unansweredCount} question${unansweredCount === 1 ? '' : 's'} before submitting.`)
+          return
+        }
+
         const result = await submitFinalListeningAction(attemptId)
         if (result.success) {
           toast.success('Listening Section completed!')
@@ -219,9 +255,7 @@ export default function ListeningPlayer({ attemptId, passages }: ListeningPlayer
   }
 
   const handlePrev = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex((prev) => prev - 1)
-    }
+    handleNavigate(currentIndex - 1)
   }
 
   if (!currentQuestion || !activePassage) {
@@ -277,6 +311,14 @@ export default function ListeningPlayer({ attemptId, passages }: ListeningPlayer
           style={{ width: `${progressPercent}%` }}
         />
       </div>
+
+      <QuestionNavigator
+        total={allQuestions.length}
+        currentIndex={currentIndex}
+        answered={allQuestions.map((question) => Boolean(selectedOptions[question.id]))}
+        onSelect={handleNavigate}
+        disabled={isPending}
+      />
 
       {/* Main Split Layout */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mb-8 min-h-0">

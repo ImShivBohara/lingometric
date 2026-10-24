@@ -4,7 +4,7 @@ export type UserRole = 'student' | 'admin';
 export type TestStatus = 'draft' | 'published' | 'archived';
 export type SectionType = 'Reading' | 'Listening' | 'Writing' | 'Speaking';
 export type DifficultyTier = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
-export type AttemptStatus = 'IN_PROGRESS' | 'SUBMITTED';
+export type AttemptStatus = 'IN_PROGRESS' | 'SUBMITTED' | 'DISCARDED';
 
 export interface UserProfile {
   id: string;
@@ -87,6 +87,7 @@ export interface Attempt {
   final_score: number | null;
   cefr_level: string | null;
   status: AttemptStatus;
+  assessment_type: SectionType | null;
 }
 
 export interface Response {

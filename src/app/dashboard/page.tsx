@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getUserProfile } from '@/lib/supabase/queries'
 import { logoutAction } from '@/features/auth/actions'
 import { createTestAttemptAction } from '@/features/testing/actions'
+import { highestSubmittedScore, resolveAttemptSkill } from '@/features/testing/attemptIdentity'
 import AttemptsHistory from './components/AttemptsHistory'
 import { 
   Trophy, 
@@ -29,10 +30,10 @@ export default async function DashboardPage() {
 
   const profile = await getUserProfile(user.id)
 
-  // Fetch real attempts from database with their respective evaluations
+  // Fetch real attempts from database with their respective evaluations and response evidence
   const { data: attempts } = await supabase
     .from('attempts')
-    .select('*, tests(*), writing_evaluations(*), listening_responses(id), speaking_evaluations(*)')
+    .select('*, tests(*), writing_evaluations(*), listening_responses(id), speaking_evaluations(*), responses(id)')
     .eq('user_id', user.id)
     .order('started_at', { ascending: false })
 
@@ -58,6 +59,24 @@ export default async function DashboardPage() {
     null, 
     'a4d70c5e-d63c-4384-a327-ee556c77d870', 
     'Speaking'
+  )
+
+  const completedAttempts = (attempts || []).filter((a) => a.status === 'SUBMITTED')
+  const highestScore = highestSubmittedScore(attempts || [])
+  const highestScoreDisplay = highestScore !== null ? String(highestScore) : 'N/A'
+  const evaluatedAttemptsCount = completedAttempts.filter((a) => Boolean(a.cefr_level)).length
+
+  const inProgressReading = (attempts || []).find(
+    (a) => a.status === 'IN_PROGRESS' && resolveAttemptSkill(a) === 'Reading'
+  )
+  const inProgressListening = (attempts || []).find(
+    (a) => a.status === 'IN_PROGRESS' && resolveAttemptSkill(a) === 'Listening'
+  )
+  const inProgressWriting = (attempts || []).find(
+    (a) => a.status === 'IN_PROGRESS' && resolveAttemptSkill(a) === 'Writing'
+  )
+  const inProgressSpeaking = (attempts || []).find(
+    (a) => a.status === 'IN_PROGRESS' && resolveAttemptSkill(a) === 'Speaking'
   )
 
   return (
@@ -119,7 +138,7 @@ export default async function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-extrabold text-white">
-                {attempts?.filter(a => a.status === 'SUBMITTED').length || 0}
+                {completedAttempts.length}
               </div>
               <p className="text-xs text-slate-500 mt-1">Total completed assessments</p>
             </CardContent>
@@ -132,9 +151,7 @@ export default async function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-extrabold text-white">
-                {attempts && attempts.filter(a => a.final_score).length > 0
-                  ? `${Math.max(...attempts.filter(a => a.final_score).map(a => a.final_score || 0))}`
-                  : 'N/A'}
+                {highestScoreDisplay}
               </div>
               <p className="text-xs text-slate-500 mt-1">Out of 100 max points</p>
             </CardContent>
@@ -142,14 +159,14 @@ export default async function DashboardPage() {
 
           <Card className="bg-slate-900/50 border-slate-800 text-white">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs text-slate-400 font-semibold tracking-wider uppercase">Certificates Issued</span>
+              <span className="text-xs text-slate-400 font-semibold tracking-wider uppercase">CEFR Evaluations</span>
               <ShieldCheck className="h-5 w-5 text-emerald-400" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-extrabold text-white">
-                {attempts?.filter(a => a.cefr_level).length || 0}
+                {evaluatedAttemptsCount}
               </div>
-              <p className="text-xs text-slate-500 mt-1">Verifiable certificate prints</p>
+              <p className="text-xs text-slate-500 mt-1">Evaluated skill assessments</p>
             </CardContent>
           </Card>
         </div>
@@ -162,9 +179,16 @@ export default async function DashboardPage() {
             {/* Reading card */}
             <Card className="bg-slate-900/40 border border-slate-900 text-white flex flex-col justify-between">
               <CardHeader>
-                <div className="flex items-center space-x-2 text-indigo-400 text-xs font-bold uppercase tracking-wider mb-1">
-                  <Play className="h-3.5 w-3.5 fill-indigo-400" />
-                  <span>Reading Assessment</span>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center space-x-2 text-indigo-400 text-xs font-bold uppercase tracking-wider">
+                    <Play className="h-3.5 w-3.5 fill-indigo-400" />
+                    <span>Reading Assessment</span>
+                  </div>
+                  {inProgressReading && (
+                    <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full uppercase font-bold">
+                      In Progress
+                    </span>
+                  )}
                 </div>
                 <CardTitle className="text-lg font-bold">Reading & Grammar Comprehension</CardTitle>
                 <CardDescription className="text-slate-400 text-xs leading-relaxed">
@@ -184,7 +208,7 @@ export default async function DashboardPage() {
                 </div>
                 <form action={startReadingAction}>
                   <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition">
-                    Start Reading Test
+                    {inProgressReading ? 'Resume Reading Test' : 'Start Reading Test'}
                   </Button>
                 </form>
               </CardContent>
@@ -193,9 +217,16 @@ export default async function DashboardPage() {
             {/* Listening card */}
             <Card className="bg-slate-900/40 border border-slate-900 text-white flex flex-col justify-between">
               <CardHeader>
-                <div className="flex items-center space-x-2 text-violet-400 text-xs font-bold uppercase tracking-wider mb-1">
-                  <Play className="h-3.5 w-3.5 fill-violet-400" />
-                  <span>Listening Assessment</span>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center space-x-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
+                    <Play className="h-3.5 w-3.5 fill-violet-400" />
+                    <span>Listening Assessment</span>
+                  </div>
+                  {inProgressListening && (
+                    <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full uppercase font-bold">
+                      In Progress
+                    </span>
+                  )}
                 </div>
                 <CardTitle className="text-lg font-bold">Listening Comprehension</CardTitle>
                 <CardDescription className="text-slate-400 text-xs leading-relaxed">
@@ -215,7 +246,7 @@ export default async function DashboardPage() {
                 </div>
                 <form action={startListeningAction}>
                   <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-500 text-white font-semibold transition">
-                    Start Listening Test
+                    {inProgressListening ? 'Resume Listening Test' : 'Start Listening Test'}
                   </Button>
                 </form>
               </CardContent>
@@ -224,9 +255,16 @@ export default async function DashboardPage() {
             {/* Writing card */}
             <Card className="bg-slate-900/40 border border-slate-900 text-white flex flex-col justify-between">
               <CardHeader>
-                <div className="flex items-center space-x-2 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-1">
-                  <Play className="h-3.5 w-3.5 fill-emerald-400" />
-                  <span>Writing Assessment</span>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center space-x-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                    <Play className="h-3.5 w-3.5 fill-emerald-400" />
+                    <span>Writing Assessment</span>
+                  </div>
+                  {inProgressWriting && (
+                    <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full uppercase font-bold">
+                      In Progress
+                    </span>
+                  )}
                 </div>
                 <CardTitle className="text-lg font-bold">Written Expression Essay</CardTitle>
                 <CardDescription className="text-slate-400 text-xs leading-relaxed">
@@ -246,7 +284,7 @@ export default async function DashboardPage() {
                 </div>
                 <form action={startWritingAction}>
                   <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition">
-                    Start Writing Test
+                    {inProgressWriting ? 'Resume Writing Test' : 'Start Writing Test'}
                   </Button>
                 </form>
               </CardContent>
@@ -255,9 +293,16 @@ export default async function DashboardPage() {
             {/* Speaking card */}
             <Card className="bg-slate-900/40 border border-slate-900 text-white flex flex-col justify-between">
               <CardHeader>
-                <div className="flex items-center space-x-2 text-rose-400 text-xs font-bold uppercase tracking-wider mb-1">
-                  <Play className="h-3.5 w-3.5 fill-rose-400" />
-                  <span>Speaking Assessment</span>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center space-x-2 text-rose-400 text-xs font-bold uppercase tracking-wider">
+                    <Play className="h-3.5 w-3.5 fill-rose-400" />
+                    <span>Speaking Assessment</span>
+                  </div>
+                  {inProgressSpeaking && (
+                    <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full uppercase font-bold">
+                      In Progress
+                    </span>
+                  )}
                 </div>
                 <CardTitle className="text-lg font-bold">Spoken Expression Task</CardTitle>
                 <CardDescription className="text-slate-400 text-xs leading-relaxed">
@@ -277,7 +322,7 @@ export default async function DashboardPage() {
                 </div>
                 <form action={startSpeakingAction}>
                   <Button type="submit" className="w-full bg-rose-600 hover:bg-rose-500 text-white font-semibold transition">
-                    Start Speaking Test
+                    {inProgressSpeaking ? 'Resume Speaking Test' : 'Start Speaking Test'}
                   </Button>
                 </form>
               </CardContent>

@@ -2,6 +2,8 @@ import React from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import WritingPlayer from '@/features/writing/components/WritingPlayer'
+import { enforceAttemptPlayerAccess } from '@/features/testing/attemptAccess'
+import { Attempt } from '@/types/database.types'
 
 interface PageProps {
   params: Promise<{ attemptId: string }>
@@ -33,9 +35,7 @@ export default async function WritingAttemptPage({ params }: PageProps) {
     redirect('/dashboard')
   }
 
-  if (attempt.status !== 'IN_PROGRESS') {
-    redirect(`/test/${attemptId}/results`)
-  }
+  enforceAttemptPlayerAccess(attempt as Attempt, 'Writing')
 
   // Fetch the section metadata matching the active test context and Writing type
   const { data: section, error: sectionError } = await supabase

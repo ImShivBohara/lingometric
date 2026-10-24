@@ -4,39 +4,51 @@ import { Question } from '@/types/database.types'
 interface TestingState {
   questions: Question[]
   currentIndex: number
-  selectedOption: string | null
+  answers: Record<string, string>
   startQuestionTime: number
-  setQuestions: (questions: Question[]) => void
-  setSelectedOption: (option: string | null) => void
-  nextQuestion: () => void
+  setSession: (questions: Question[], answers?: Record<string, string>) => void
+  setAnswer: (questionId: string, option: string | null) => void
+  goToQuestion: (index: number) => void
   reset: () => void
 }
 
 export const useTestingStore = create<TestingState>((set) => ({
   questions: [],
   currentIndex: 0,
-  selectedOption: null,
+  answers: {},
   startQuestionTime: 0,
 
-  setQuestions: (questions) => set({ 
-    questions, 
-    currentIndex: 0, 
-    selectedOption: null, 
-    startQuestionTime: Date.now() 
+  setSession: (questions, answers = {}) => set({
+    questions,
+    answers,
+    currentIndex: 0,
+    startQuestionTime: Date.now(),
   }),
 
-  setSelectedOption: (option) => set({ selectedOption: option }),
+  setAnswer: (questionId, option) => set((state) => {
+    const nextAnswers = { ...state.answers }
+    if (!option) {
+      delete nextAnswers[questionId]
+    } else {
+      nextAnswers[questionId] = option
+    }
+    return { answers: nextAnswers }
+  }),
 
-  nextQuestion: () => set((state) => ({
-    currentIndex: state.currentIndex + 1,
-    selectedOption: null,
-    startQuestionTime: Date.now(),
-  })),
+  goToQuestion: (index) => set((state) => {
+    if (index < 0 || index >= state.questions.length) {
+      return state
+    }
+    return {
+      currentIndex: index,
+      startQuestionTime: Date.now(),
+    }
+  }),
 
   reset: () => set({
     questions: [],
     currentIndex: 0,
-    selectedOption: null,
+    answers: {},
     startQuestionTime: 0,
   }),
 }))

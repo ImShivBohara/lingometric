@@ -14,6 +14,12 @@ import {
   Lightbulb, 
   CornerDownRight 
 } from 'lucide-react'
+import {
+  AssessmentType,
+  getResumePath,
+  parseAssessmentType,
+  resolveAttemptSkill,
+} from '@/features/testing/attemptIdentity'
 
 interface ResultsPageProps {
   params: Promise<{ attemptId: string }>
@@ -45,8 +51,17 @@ export default async function TestResultsPage({ params }: ResultsPageProps) {
     redirect('/dashboard')
   }
 
+  if (attempt.status === 'DISCARDED') {
+    redirect('/dashboard')
+  }
+
   if (attempt.status !== 'SUBMITTED') {
-    redirect(`/test/${attemptId}`)
+    const resolvedType =
+      parseAssessmentType(attempt.assessment_type) ?? resolveAttemptSkill(attempt)
+    if (resolvedType && resolvedType !== 'Unknown') {
+      redirect(getResumePath(attemptId, resolvedType as AssessmentType))
+    }
+    redirect('/dashboard')
   }
 
   // Query writing evaluation for this attempt to determine if it is a Writing attempt

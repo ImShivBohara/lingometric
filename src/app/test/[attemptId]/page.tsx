@@ -2,6 +2,8 @@ import React from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import ReadingPlayer from '@/features/testing/components/ReadingPlayer'
+import { enforceAttemptPlayerAccess } from '@/features/testing/attemptAccess'
+import { Attempt, Question } from '@/types/database.types'
 
 interface PageProps {
   params: Promise<{ attemptId: string }>
@@ -33,11 +35,8 @@ export default async function TestAttemptPage({ params }: PageProps) {
     redirect('/dashboard')
   }
 
-  if (attempt.status !== 'IN_PROGRESS') {
-    redirect(`/test/${attemptId}/results`)
-  }
+  enforceAttemptPlayerAccess(attempt as Attempt, 'Reading')
 
-  // Fetch all sections for this test to determine the entrypoint section type
   const { data: sections, error: sectionsError } = await supabase
     .from('sections')
     .select('id, type')
@@ -47,20 +46,6 @@ export default async function TestAttemptPage({ params }: PageProps) {
   if (sectionsError || !sections || sections.length === 0) {
     console.error('Failed to locate test sections:', sectionsError?.message)
     redirect('/dashboard')
-  }
-
-  const activeSection = sections[0]
-
-  if (activeSection.type === 'Writing') {
-    redirect(`/test/${attemptId}/writing`)
-  }
-
-  if (activeSection.type === 'Listening') {
-    redirect(`/test/${attemptId}/listening`)
-  }
-
-  if (activeSection.type === 'Speaking') {
-    redirect(`/test/${attemptId}/speaking`)
   }
 
   const readingSection = sections.find((s) => s.type === 'Reading')
@@ -132,9 +117,23 @@ export default async function TestAttemptPage({ params }: PageProps) {
     questions = fallbackQuestions as NonNullable<AssignedQuestionRow['questions']>[]
   }
 
+  const { data: savedResponses } = await supabase
+    .from('responses')
+    .select('question_id, selected_answer')
+    .eq('attempt_id', attemptId)
+
+  const initialAnswers: Record<string, string> = {}
+  for (const response of savedResponses || []) {
+    initialAnswers[response.question_id] = response.selected_answer
+  }
+
   return (
     <div className="w-full min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center">
-      <ReadingPlayer attemptId={attemptId} initialQuestions={questions} />
+      <ReadingPlayer
+        attemptId={attemptId}
+        initialQuestions={questions as Question[]}
+        initialAnswers={initialAnswers}
+      />
     </div>
   )
 }
