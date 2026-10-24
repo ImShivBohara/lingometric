@@ -1,9 +1,10 @@
 -- ============================================================================
 -- Migration: 20260608010000_attempt_assessment_identity.sql
 -- Purpose: Introduce explicit assessment_type on attempts, add DISCARDED status enum,
---          perform safe conservative historical backfill, and establish deterministic
---          deduplication and uniqueness on responses.
--- Execution Safety: Additive, idempotent, data-preserving. Does not drop user data.
+--          perform safe conservative historical backfill, and establish deterministic,
+--          non-destructive duplicate checking and uniqueness on reading responses.
+-- Execution Safety: Additive, idempotent, non-destructive.
+--                   Does NOT delete, archive, or drop student records.
 -- ============================================================================
 
 -- 1. Allow unfinished attempts to be discarded without row deletion.
@@ -98,67 +99,27 @@ WHERE a.assessment_type IS NULL
 ALTER TABLE public.responses
     ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL;
 
--- 5. Safe, deterministic, auditable deduplication for reading responses:
--- Create audit backup table to retain any displaced duplicate records
-CREATE TABLE IF NOT EXISTS public.responses_backup_duplicates (
-    id UUID,
-    attempt_id UUID,
-    question_id UUID,
-    selected_answer TEXT,
-    is_correct BOOLEAN,
-    score NUMERIC,
-    time_taken_seconds INTEGER,
-    created_at TIMESTAMP WITH TIME ZONE,
-    archived_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- Check for conflicting answers before any deletion:
--- If duplicate rows have different selected_answer values, abort to require manual inspection
+-- 5. Non-destructive duplicate check and unique constraint enforcement:
+-- Instead of silently deleting or creating duplicate backup tables, this checks whether
+-- any duplicate (attempt_id, question_id) rows exist.
+-- If duplicates are found, it aborts with a descriptive error requiring manual review.
+-- If no duplicates exist, it safely applies the unique constraint.
 DO $$
 DECLARE
-    conflict_count INTEGER;
+    dup_count INTEGER;
 BEGIN
-    SELECT COUNT(*) INTO conflict_count
+    SELECT COUNT(*) INTO dup_count
     FROM (
         SELECT attempt_id, question_id
         FROM public.responses
         GROUP BY attempt_id, question_id
-        HAVING COUNT(DISTINCT selected_answer) > 1
-    ) conflicts;
-
-    IF conflict_count > 0 THEN
-        RAISE EXCEPTION 'Cannot migrate: Found % conflicting duplicate reading responses with different selected_answer values. Manual review required before applying unique constraint.', conflict_count;
-    END IF;
-END $$;
-
--- For exact duplicates (same answer), archive displaced rows and deterministically keep the lowest UUID
-WITH duplicates_to_archive AS (
-    SELECT r.*
-    FROM public.responses r
-    JOIN (
-        SELECT attempt_id, question_id, MIN(id::text) AS keep_id
-        FROM public.responses
-        GROUP BY attempt_id, question_id
         HAVING COUNT(*) > 1
-    ) d ON r.attempt_id = d.attempt_id
-       AND r.question_id = d.question_id
-       AND r.id::text <> d.keep_id
-)
-INSERT INTO public.responses_backup_duplicates (
-    id, attempt_id, question_id, selected_answer, is_correct, score, time_taken_seconds, created_at
-)
-SELECT id, attempt_id, question_id, selected_answer, is_correct, score, time_taken_seconds, created_at
-FROM duplicates_to_archive;
+    ) duplicates;
 
-DELETE FROM public.responses r
-WHERE EXISTS (
-    SELECT 1 FROM public.responses_backup_duplicates b
-    WHERE b.id = r.id
-);
+    IF dup_count > 0 THEN
+        RAISE EXCEPTION 'Cannot apply unique constraint: Found % duplicate reading response group(s) in public.responses. Non-destructive migration aborted. Manual inspection and resolution required.', dup_count;
+    END IF;
 
--- 6. Enforce unique constraint on (attempt_id, question_id) to support upserts safely
-DO $$
-BEGIN
     IF NOT EXISTS (
         SELECT 1
         FROM pg_constraint

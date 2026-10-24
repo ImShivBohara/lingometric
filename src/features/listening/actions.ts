@@ -23,16 +23,51 @@ export async function submitListeningResponseAction(
     return { success: false, error: modifiable.error }
   }
 
-  // Retrieve the correct answer from the listening_questions table
+  // 1. Retrieve the question to get its parent passage
   const { data: question, error: questionError } = await supabase
     .from('listening_questions')
-    .select('correct_answer')
+    .select('correct_answer, passage_id')
     .eq('id', questionId)
     .single()
 
   if (questionError || !question) {
     console.error('Listening question lookup failed:', questionError?.message)
     return { success: false, error: 'Question verification failed' }
+  }
+
+  // 2. Verify that the question's passage is assigned to this test
+  const { data: assignedPassage } = await supabase
+    .from('test_listening_passages')
+    .select('id')
+    .eq('test_id', attempt.test_id)
+    .eq('passage_id', question.passage_id)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  let isAssigned = !!assignedPassage
+  if (!isAssigned) {
+    // Check fallback: listening_passages linked via section with test_id
+    const { data: passage } = await supabase
+      .from('listening_passages')
+      .select('section_id')
+      .eq('id', question.passage_id)
+      .maybeSingle()
+
+    if (passage) {
+      const { data: section } = await supabase
+        .from('sections')
+        .select('id')
+        .eq('id', passage.section_id)
+        .eq('test_id', attempt.test_id)
+        .eq('type', 'Listening')
+        .maybeSingle()
+
+      isAssigned = !!section
+    }
+  }
+
+  if (!isAssigned) {
+    return { success: false, error: 'Question does not belong to this assessment' }
   }
 
   const isCorrect = question.correct_answer.trim().toLowerCase() === selectedAnswer.trim().toLowerCase()
@@ -69,71 +104,24 @@ export async function submitFinalListeningAction(attemptId: string) {
     return { success: false, error: owned.error }
   }
 
-  const { supabase, userId, attempt } = owned.data
+  const { supabase, attempt } = owned.data
   const modifiable = assertModifiableAttempt(attempt, 'Listening')
   if (!modifiable.success) {
     return { success: false, error: modifiable.error }
   }
 
-  // Fetch all responses for this attempt
-  const { data: responses, error: responsesError } = await supabase
-    .from('listening_responses')
-    .select('is_correct')
-    .eq('attempt_id', attemptId)
+  // Trusted server-side RPC finalization
+  // Computes score against database answer keys, rejects incomplete submissions,
+  // and updates attempt status in a single atomic transaction.
+  const { data, error: rpcError } = await supabase.rpc('submit_listening_attempt', {
+    p_attempt_id: attemptId,
+  })
 
-  if (responsesError || !responses || responses.length === 0) {
-    console.error('Failed to calculate final listening score: responses missing')
-    return { success: false, error: 'No responses registered for this attempt' }
-  }
-
-  const totalQuestions = responses.length
-  const correctAnswers = responses.filter((r) => r.is_correct).length
-  const finalScore = Math.round((correctAnswers / totalQuestions) * 100)
-
-  // 3. Map final score to CEFR level based on standard bands
-  let cefrLevel = 'B1' // Default fallback
-  if (finalScore <= 20) {
-    cefrLevel = 'A1'
-  } else if (finalScore <= 40) {
-    cefrLevel = 'A2'
-  } else if (finalScore <= 60) {
-    cefrLevel = 'B1'
-  } else if (finalScore <= 80) {
-    cefrLevel = 'B2'
-  } else if (finalScore <= 90) {
-    cefrLevel = 'C1'
-  } else {
-    cefrLevel = 'C2'
-  }
-
-  // 4. Update attempts table status
-  const { error: updateError } = await supabase
-    .from('attempts')
-    .update({
-      submitted_at: new Date().toISOString(),
-      final_score: finalScore,
-      cefr_level: cefrLevel,
-      status: 'SUBMITTED',
-    })
-    .eq('id', attemptId)
-    .eq('user_id', userId)
-    .eq('status', 'IN_PROGRESS')
-
-  if (updateError) {
-    console.error('Failed to finalize listening attempt:', updateError.message)
-    return { success: false, error: 'Attempt finalization failed to save' }
-  }
-
-  // 5. Sync user profile CEFR level
-  const { error: userUpdateError } = await supabase
-    .from('users')
-    .update({ current_cefr_level: cefrLevel })
-    .eq('id', userId)
-
-  if (userUpdateError) {
-    console.error('Failed to sync user profile CEFR level:', userUpdateError.message)
+  if (rpcError) {
+    console.error('Failed to finalize listening attempt via trusted RPC:', rpcError.message)
+    return { success: false, error: rpcError.message || 'Attempt finalization failed to save' }
   }
 
   revalidatePath('/dashboard')
-  return { success: true }
+  return { success: true, data }
 }

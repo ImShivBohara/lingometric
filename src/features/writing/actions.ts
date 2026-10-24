@@ -3,9 +3,12 @@
 import { revalidatePath } from 'next/cache'
 import { evaluateEssay } from '@/lib/gemini'
 import { assertModifiableAttempt, getOwnedAttempt } from '@/features/testing/attemptAccess'
+import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
 /**
  * Server action to submit an essay response and trigger AI scoring/evaluation.
+ * The evaluation is submitted via a trusted server-only service-role client,
+ * ensuring students cannot forge scores or CEFR levels.
  */
 export async function submitEssayAction(
   attemptId: string,
@@ -23,10 +26,10 @@ export async function submitEssayAction(
     return { success: false, error: modifiable.error }
   }
 
-  // 3. Fetch writing prompt constraints for validation
+  // 1. Fetch writing prompt constraints for validation
   const { data: prompt, error: promptError } = await supabase
     .from('writing_prompts')
-    .select('*')
+    .select('id, prompt_text, section_id')
     .eq('id', promptId)
     .single()
 
@@ -35,83 +38,46 @@ export async function submitEssayAction(
     return { success: false, error: 'Prompt verification failed' }
   }
 
+  // 2. Verify prompt belongs to this attempt's test
+  const { data: section } = await supabase
+    .from('sections')
+    .select('id')
+    .eq('id', prompt.section_id)
+    .eq('test_id', attempt.test_id)
+    .eq('type', 'Writing')
+    .maybeSingle()
+
+  if (!section) {
+    return { success: false, error: 'Writing prompt does not belong to this assessment' }
+  }
+
   // Calculate word count
   const wordCount = essayText.trim() === '' ? 0 : essayText.trim().split(/\s+/).length
   console.log(`Submitting essay with ${wordCount} words for attempt ${attemptId}`)
 
-  // We allow submission during auto-submit even if word count is out of bounds,
-  // but we should log/track warnings. 
-
   try {
-    // 4. Trigger Gemini Evaluation
-    // This will hit the stop checkpoint if API keys are not set up.
+    // 3. Trigger Gemini Evaluation
     const evaluation = await evaluateEssay(prompt.prompt_text, essayText)
 
-    // 5. Insert results into writing_evaluations
-    const { error: insertError } = await supabase
-      .from('writing_evaluations')
-      .insert({
-        attempt_id: attemptId,
-        essay_text: essayText,
-        grammar_score: evaluation.grammar_score,
-        vocabulary_score: evaluation.vocabulary_score,
-        coherence_score: evaluation.coherence_score,
-        fluency_score: evaluation.fluency_score,
-        overall_score: evaluation.overall_score,
-        cefr_level: evaluation.cefr_level,
-        feedback: evaluation.feedback,
-        raw_response: evaluation.raw_response, // store raw response for debugging/auditability
-      })
+    // 4. Save evaluation and finalize attempt via trusted server-only RPC using service role client
+    const serviceClient = createServiceRoleClient()
+    const { error: rpcError } = await serviceClient.rpc('submit_writing_evaluation', {
+      p_attempt_id: attemptId,
+      p_user_id: userId,
+      p_essay_text: essayText,
+      p_grammar_score: evaluation.grammar_score,
+      p_vocabulary_score: evaluation.vocabulary_score,
+      p_coherence_score: evaluation.coherence_score,
+      p_fluency_score: evaluation.fluency_score,
+      p_overall_score: evaluation.overall_score,
+      p_cefr_level: evaluation.cefr_level,
+      p_feedback: evaluation.feedback,
+      p_raw_response: evaluation.raw_response,
+    })
 
-    if (insertError) {
-      const payload = {
-        attempt_id: attemptId,
-        essay_text: essayText,
-        grammar_score: evaluation.grammar_score,
-        vocabulary_score: evaluation.vocabulary_score,
-        coherence_score: evaluation.coherence_score,
-        fluency_score: evaluation.fluency_score,
-        overall_score: evaluation.overall_score,
-        cefr_level: evaluation.cefr_level,
-        feedback: evaluation.feedback,
-        raw_response: evaluation.raw_response,
-      }
-      console.error('INSERT PAYLOAD:', JSON.stringify(payload, null, 2))
-      console.error('SUPABASE ERROR OBJECT:', JSON.stringify(insertError, null, 2))
-      console.error('FAILING TABLE NAME: writing_evaluations')
-      console.error('FAILING COLUMN NAME (IF ANY): check RLS policies or schema columns')
-      
-      const errMsg = `Failed to save essay evaluation metrics: [Code: ${insertError.code}] ${insertError.message} (Details: ${insertError.details || 'None'}, Hint: ${insertError.hint || 'None'})`
-      return { success: false, error: errMsg }
-    }
-
-    // 6. Update attempt record
-    const { error: attemptUpdateError } = await supabase
-      .from('attempts')
-      .update({
-        submitted_at: new Date().toISOString(),
-        final_score: evaluation.overall_score,
-        cefr_level: evaluation.cefr_level,
-        status: 'SUBMITTED',
-      })
-      .eq('id', attemptId)
-      .eq('user_id', userId)
-      .eq('status', 'IN_PROGRESS')
-
-    if (attemptUpdateError) {
-      console.error('Failed to finalize attempt:', attemptUpdateError.message)
-      return { success: false, error: 'Failed to save test status update' }
-    }
-
-    // 7. Sync student profile current CEFR progress level
-    const { error: userUpdateError } = await supabase
-      .from('users')
-      .update({ current_cefr_level: evaluation.cefr_level })
-      .eq('id', userId)
-
-    if (userUpdateError) {
-      console.error('Failed to sync student CEFR progress level:', userUpdateError.message)
-      // We don't fail the entire submission if this sync fails, but we flag it
+    if (rpcError) {
+      console.error('Failed to submit writing evaluation via trusted RPC:', rpcError.message)
+      return { success: false, error: rpcError.message || 'Failed to save essay evaluation' }
     }
 
     revalidatePath('/dashboard')

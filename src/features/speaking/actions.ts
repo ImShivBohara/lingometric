@@ -3,10 +3,13 @@
 import { revalidatePath } from 'next/cache'
 import { evaluateSpeech } from '@/lib/gemini'
 import { assertModifiableAttempt, getOwnedAttempt } from '@/features/testing/attemptAccess'
+import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
 
 /**
  * Server action to download a recorded audio file from private storage,
  * evaluate it using Gemini multimodal analysis, and finalize the attempt.
+ * The evaluation is submitted via a trusted server-only service-role client,
+ * ensuring students cannot forge scores or CEFR levels.
  * 
  * @param attemptId Unique ID of the active test attempt
  * @param promptId Unique ID of the speaking prompt
@@ -28,10 +31,10 @@ export async function submitSpeakingAction(
     return { success: false, error: modifiable.error }
   }
 
-  // 3. Fetch speaking prompt text for context
+  // 1. Fetch speaking prompt text for context
   const { data: prompt, error: promptError } = await supabase
     .from('speaking_prompts')
-    .select('*')
+    .select('id, prompt_text, section_id')
     .eq('id', promptId)
     .single()
 
@@ -40,8 +43,21 @@ export async function submitSpeakingAction(
     return { success: false, error: 'Speaking prompt verification failed' }
   }
 
+  // 2. Verify prompt belongs to this attempt's test
+  const { data: section } = await supabase
+    .from('sections')
+    .select('id')
+    .eq('id', prompt.section_id)
+    .eq('test_id', attempt.test_id)
+    .eq('type', 'Speaking')
+    .maybeSingle()
+
+  if (!section) {
+    return { success: false, error: 'Speaking prompt does not belong to this assessment' }
+  }
+
   try {
-    // 4. Download recording file buffer from private Supabase Storage
+    // 3. Download recording file buffer from private Supabase Storage
     console.log(`Downloading audio file from private storage path: ${storagePath}`)
     const { data: fileData, error: downloadError } = await supabase
       .storage
@@ -53,7 +69,7 @@ export async function submitSpeakingAction(
       return { success: false, error: 'Failed to retrieve recording from private storage' }
     }
 
-    // 5. Convert storage file blob to Base64
+    // 4. Convert storage file blob to Base64
     const arrayBuffer = await fileData.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
     const base64Audio = buffer.toString('base64')
@@ -68,59 +84,30 @@ export async function submitSpeakingAction(
       mimeType = 'audio/mp3'
     }
 
-    // 6. Trigger Gemini API Multimodal evaluation
+    // 5. Trigger Gemini API Multimodal evaluation
     console.log(`Evaluating audio file content via Gemini API using ${mimeType}...`)
     const evaluation = await evaluateSpeech(prompt.prompt_text, base64Audio, mimeType)
 
-    // 7. Insert evaluation metrics into speaking_evaluations
-    // We save the storagePath as the audio_url so we can securely create signed URLs for dashboard review
-    const { error: insertError } = await supabase
-      .from('speaking_evaluations')
-      .insert({
-        attempt_id: attemptId,
-        audio_url: storagePath,
-        transcript: evaluation.transcript,
-        pronunciation_score: evaluation.pronunciation_score,
-        grammar_score: evaluation.grammar_score,
-        fluency_score: evaluation.fluency_score,
-        vocabulary_score: evaluation.vocabulary_score,
-        overall_score: evaluation.overall_score,
-        cefr_level: evaluation.cefr_level,
-        feedback: evaluation.feedback,
-        raw_response: evaluation.raw_response,
-      })
+    // 6. Save evaluation and finalize attempt via trusted server-only RPC using service role client
+    const serviceClient = createServiceRoleClient()
+    const { error: rpcError } = await serviceClient.rpc('submit_speaking_evaluation', {
+      p_attempt_id: attemptId,
+      p_user_id: userId,
+      p_audio_url: storagePath,
+      p_transcript: evaluation.transcript,
+      p_pronunciation_score: evaluation.pronunciation_score,
+      p_grammar_score: evaluation.grammar_score,
+      p_fluency_score: evaluation.fluency_score,
+      p_vocabulary_score: evaluation.vocabulary_score,
+      p_overall_score: evaluation.overall_score,
+      p_cefr_level: evaluation.cefr_level,
+      p_feedback: evaluation.feedback,
+      p_raw_response: evaluation.raw_response,
+    })
 
-    if (insertError) {
-      console.error('Failed to save speaking evaluation details:', insertError.message)
-      return { success: false, error: 'Failed to save speech evaluation results' }
-    }
-
-    // 8. Update attempts table to submitted status
-    const { error: attemptUpdateError } = await supabase
-      .from('attempts')
-      .update({
-        submitted_at: new Date().toISOString(),
-        final_score: evaluation.overall_score,
-        cefr_level: evaluation.cefr_level,
-        status: 'SUBMITTED',
-      })
-      .eq('id', attemptId)
-      .eq('user_id', userId)
-      .eq('status', 'IN_PROGRESS')
-
-    if (attemptUpdateError) {
-      console.error('Failed to finalize attempt:', attemptUpdateError.message)
-      return { success: false, error: 'Failed to finalize assessment status' }
-    }
-
-    // 9. Sync student current CEFR level progress
-    const { error: userUpdateError } = await supabase
-      .from('users')
-      .update({ current_cefr_level: evaluation.cefr_level })
-      .eq('id', userId)
-
-    if (userUpdateError) {
-      console.error('Failed to sync student CEFR progress level:', userUpdateError.message)
+    if (rpcError) {
+      console.error('Failed to submit speaking evaluation via trusted RPC:', rpcError.message)
+      return { success: false, error: rpcError.message || 'Failed to save speech evaluation' }
     }
 
     revalidatePath('/dashboard')

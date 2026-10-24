@@ -101,6 +101,41 @@ export async function submitResponseAction(
     return { success: false, error: modifiable.error }
   }
 
+  // 1. Verify questionId belongs to this attempt's assigned test questions
+  const { data: assignedQuestion } = await supabase
+    .from('test_reading_questions')
+    .select('question_id')
+    .eq('test_id', attempt.test_id)
+    .eq('question_id', questionId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  let isAssigned = !!assignedQuestion
+  if (!isAssigned) {
+    // Check fallback: questions linked via test sections
+    const { data: section } = await supabase
+      .from('sections')
+      .select('id')
+      .eq('test_id', attempt.test_id)
+      .eq('type', 'Reading')
+      .maybeSingle()
+
+    if (section) {
+      const { data: fallbackQ } = await supabase
+        .from('questions')
+        .select('id')
+        .eq('id', questionId)
+        .eq('section_id', section.id)
+        .maybeSingle()
+
+      isAssigned = !!fallbackQ
+    }
+  }
+
+  if (!isAssigned) {
+    return { success: false, error: 'Question does not belong to this assessment' }
+  }
+
   const { data: question, error: questionError } = await supabase
     .from('questions')
     .select('correct_answer')
@@ -146,74 +181,26 @@ export async function submitFinalAttemptAction(attemptId: string) {
     return { success: false, error: owned.error }
   }
 
-  const { supabase, userId, attempt } = owned.data
+  const { supabase, attempt } = owned.data
   const modifiable = assertModifiableAttempt(attempt, 'Reading')
   if (!modifiable.success) {
     return { success: false, error: modifiable.error }
   }
 
-  const { data: responses, error: responsesError } = await supabase
-    .from('responses')
-    .select('is_correct')
-    .eq('attempt_id', attemptId)
+  // Trusted server-side RPC finalization
+  // Computes score against database answer keys, rejects incomplete submissions,
+  // and updates attempt status in a single atomic transaction.
+  const { data, error: rpcError } = await supabase.rpc('submit_reading_attempt', {
+    p_attempt_id: attemptId,
+  })
 
-  if (responsesError || !responses || responses.length === 0) {
-    console.error('Failed to calculate final score: responses missing')
-    return { success: false, error: 'No responses registered for this attempt' }
-  }
-
-  const totalQuestions = responses.length
-  const correctAnswers = responses.filter((r) => r.is_correct).length
-  const finalScore = Math.round((correctAnswers / totalQuestions) * 100)
-
-  let cefrLevel = 'B1'
-  if (finalScore <= 20) {
-    cefrLevel = 'A1'
-  } else if (finalScore <= 40) {
-    cefrLevel = 'A2'
-  } else if (finalScore <= 60) {
-    cefrLevel = 'B1'
-  } else if (finalScore <= 80) {
-    cefrLevel = 'B2'
-  } else if (finalScore <= 90) {
-    cefrLevel = 'C1'
-  } else {
-    cefrLevel = 'C2'
-  }
-
-  const { data: updatedAttempt, error: updateError } = await supabase
-    .from('attempts')
-    .update({
-      submitted_at: new Date().toISOString(),
-      final_score: finalScore,
-      cefr_level: cefrLevel,
-      status: 'SUBMITTED',
-    })
-    .eq('id', attemptId)
-    .eq('user_id', userId)
-    .eq('status', 'IN_PROGRESS')
-    .select('user_id')
-    .single()
-
-  if (updateError || !updatedAttempt) {
-    console.error('Failed to update final attempt:', updateError?.message)
-    return { success: false, error: 'Attempt finalization failed to save' }
-  }
-
-  if (updatedAttempt.user_id) {
-    const { error: userUpdateError } = await supabase
-      .from('users')
-      .update({ current_cefr_level: cefrLevel })
-      .eq('id', updatedAttempt.user_id)
-
-    if (userUpdateError) {
-      console.error('Failed to sync user profile CEFR progress level:', userUpdateError.message)
-      return { success: false, error: 'Failed to sync profile progress level' }
-    }
+  if (rpcError) {
+    console.error('Failed to submit reading attempt via trusted RPC:', rpcError.message)
+    return { success: false, error: rpcError.message || 'Attempt finalization failed to save' }
   }
 
   revalidatePath('/dashboard')
-  return { success: true }
+  return { success: true, data }
 }
 
 export async function resumeAttemptAction(attemptId: string) {
