@@ -286,6 +286,14 @@ export async function evaluateSpeech(
 
     Output the exact spoken transcript in the 'transcript' field.
     Provide actionable feedback: strengths, weaknesses (hesitations, pronunciation slips, structural errors), and recommendations.
+
+    ### Grading Constraints & Score Inflation Prevention Rules:
+    - **Score Inflation Ban**: Be strict and realistic. Do not award scores in the 90s unless the spoken performance displays authentic near-native fluency, complex syntax, and pristine phonological control.
+    - **Standard Speech Cap**: Clear, intelligible speech with standard conversational vocabulary and simple structures must be capped at the **B2** tier (maximum score of 80).
+    - **Hard C1 Gate**: To be graded at C1 (81-90), the response must show advanced lexical variety, spontaneous fluent pacing with negligible unnatural pauses, and accurate use of complex grammar.
+    - **Hard C2 Gate**: To be graded at C2 (91-100), all category scores must be >= 90 with near-native ease, sophisticated idiomatic expression, and flawless delivery.
+    - **Provisional Notice**: This assessment provides a provisional, indicative diagnostic rating based on a single oral response.
+
     All responses must be strictly JSON format conforming to the requested schema.
   `
 

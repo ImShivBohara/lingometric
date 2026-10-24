@@ -8,10 +8,11 @@ import {
   PenTool, 
   Mic, 
   Award, 
-  ShieldCheck, 
   ChevronRight,
   TrendingUp,
-  BrainCircuit
+  BrainCircuit,
+  BarChart3,
+  FileCheck2
 } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 
@@ -34,9 +35,14 @@ export default async function LandingPage() {
             <div className="p-2 bg-indigo-600/15 border border-indigo-500/30 rounded-lg">
               <BrainCircuit className="h-6 w-6 text-indigo-400" />
             </div>
-            <span className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 bg-clip-text text-transparent">
-              LinguaCert AI
-            </span>
+            <div className="flex flex-col">
+              <span className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 bg-clip-text text-transparent leading-none">
+                LingoMetric
+              </span>
+              <span className="text-[10px] text-slate-400 font-medium tracking-wide">
+                Know Your English Level
+              </span>
+            </div>
           </div>
 
           <nav className="flex items-center space-x-4">
@@ -70,16 +76,16 @@ export default async function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full border border-indigo-500/30 bg-indigo-500/5 text-indigo-400 text-xs font-semibold tracking-wide uppercase mb-6 animate-pulse">
             <Award className="h-4 w-4" />
-            <span>Accurate CEFR Standardized Scales</span>
+            <span>Know Your English Level • CEFR Framework</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white max-w-4xl mx-auto leading-tight sm:leading-none">
             Measure Your English Proficiency <br className="hidden sm:inline" />
-            With <span className="bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 bg-clip-text text-transparent">AI Precision</span>
+            With <span className="bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 bg-clip-text text-transparent">Diagnostic Precision</span>
           </h1>
 
           <p className="mt-6 text-lg sm:text-xl text-slate-400 max-w-2xl mx-auto font-light leading-relaxed">
-            Get an instant, robust, and verifiable evaluation of your Reading, Listening, Writing, and Speaking skills, completely aligned with the global CEFR framework.
+            Get an instant, transparent diagnostic evaluation of your Reading, Listening, Writing, and Speaking skills, mapped to the international CEFR framework.
           </p>
 
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -112,7 +118,7 @@ export default async function LandingPage() {
               Complete Four-Skill Evaluation Suite
             </h2>
             <p className="mt-4 text-slate-400 font-light">
-              Unlike basic tests, LinguaCert AI covers all core dimensions of linguistic competency using optimized assessment models.
+              LingoMetric covers all core dimensions of linguistic competency using dedicated assessment workflows.
             </p>
           </div>
 
@@ -124,7 +130,7 @@ export default async function LandingPage() {
               </div>
               <h3 className="text-lg font-bold text-white mb-2">Reading Section</h3>
               <p className="text-sm text-slate-400 leading-relaxed font-light">
-                Adaptive comprehension passages and grammar evaluations that scale in difficulty based on response accuracy.
+                Comprehension passages, grammar, vocabulary, and sentence completion questions verified against canonical database keys.
               </p>
             </div>
 
@@ -135,7 +141,7 @@ export default async function LandingPage() {
               </div>
               <h3 className="text-lg font-bold text-white mb-2">Listening Section</h3>
               <p className="text-sm text-slate-400 leading-relaxed font-light">
-                High-fidelity audio playback with interactive multiple-choice assessment to evaluate auditory language processing.
+                Natural audio playback with multiple-choice comprehension questions to evaluate auditory language processing.
               </p>
             </div>
 
@@ -146,7 +152,7 @@ export default async function LandingPage() {
               </div>
               <h3 className="text-lg font-bold text-white mb-2">Writing Evaluation</h3>
               <p className="text-sm text-slate-400 leading-relaxed font-light">
-                Open-ended essay interface evaluating spelling, lexicon richness, structural coherence, and topical alignment.
+                Open-ended essay interface evaluating grammar accuracy, lexical range, structural coherence, and topical fluency via AI.
               </p>
             </div>
 
@@ -170,20 +176,22 @@ export default async function LandingPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-6">
               <h2 className="text-3xl font-bold tracking-tight text-white leading-tight">
-                Computerized Adaptive Testing aligned to CEFR Levels
+                Objective Skill Evaluation Aligned to CEFR Levels
               </h2>
               <p className="text-slate-400 font-light leading-relaxed">
-                LinguaCert AI uses an adaptive question delivery protocol. Starting at a baseline level (B1), the difficulty shifts dynamically after each question:
+                LingoMetric benchmarks your English capabilities against the global Common European Framework of Reference for Languages (CEFR) standard:
               </p>
 
               <div className="space-y-4">
                 <div className="flex items-start space-x-3">
                   <div className="mt-1 p-1 bg-indigo-500/15 border border-indigo-500/30 rounded text-indigo-400">
-                    <ChevronRight className="h-4 w-4" />
+                    <BarChart3 className="h-4 w-4" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-white">Dynamic Item Selection</h4>
-                    <p className="text-sm text-slate-400 font-light">Correct answers route to more challenging questions. Incorrect responses recalibrate downward to isolate your capability fast.</p>
+                    <h4 className="font-semibold text-white">Precise Percentage Scoring</h4>
+                    <p className="text-sm text-slate-400 font-light">
+                      Raw scores are calculated strictly against canonical answer keys using exact question denominators.
+                    </p>
                   </div>
                 </div>
 
@@ -192,18 +200,22 @@ export default async function LandingPage() {
                     <TrendingUp className="h-4 w-4" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-white">No Mock Grading System</h4>
-                    <p className="text-sm text-slate-400 font-light">Grading models use accurate psychometric scales (0–100 mapped to standard A1 to C2 tiers) without artificial grade inflation.</p>
+                    <h4 className="font-semibold text-white">Calibrated Provisional Grading</h4>
+                    <p className="text-sm text-slate-400 font-light">
+                      Diagnostic tests provide provisional, indicative level placements based on assessed content without artificial score inflation.
+                    </p>
                   </div>
                 </div>
 
                 <div className="flex items-start space-x-3">
                   <div className="mt-1 p-1 bg-blue-500/15 border border-blue-500/30 rounded text-blue-400">
-                    <ShieldCheck className="h-4 w-4" />
+                    <FileCheck2 className="h-4 w-4" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-white">Secure Verification Page</h4>
-                    <p className="text-sm text-slate-400 font-light">Every certificate yields a cryptographically generated verification code verifiable directly on the platform by colleges or recruiters.</p>
+                    <h4 className="font-semibold text-white">Actionable Diagnostic Reports</h4>
+                    <p className="text-sm text-slate-400 font-light">
+                      Instant qualitative feedback highlighting grammar strengths, lexical variety, and actionable suggestions for improvement.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -211,11 +223,11 @@ export default async function LandingPage() {
 
             {/* Visual representation of CEFR levels */}
             <div className="p-8 rounded-2xl border border-slate-900 bg-slate-900/30 backdrop-blur-sm space-y-6">
-              <h3 className="font-bold text-white text-lg border-b border-slate-800 pb-3">CEFR Reference Scale Mapping</h3>
+              <h3 className="font-bold text-white text-lg border-b border-slate-800 pb-3">CEFR Framework Tiers</h3>
               <div className="space-y-3">
                 {[
                   { level: 'C2', desc: 'Proficient User (Mastery)', score: '91-100', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-                  { level: 'C1', desc: 'Advanced User (Effective)', score: '81-90', color: 'bg-teal-500/20 text-teal-400 border-teal-500/30' },
+                  { level: 'C1', desc: 'Advanced User (Effective Operational)', score: '81-90', color: 'bg-teal-500/20 text-teal-400 border-teal-500/30' },
                   { level: 'B2', desc: 'Independent User (Vantage)', score: '61-80', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
                   { level: 'B1', desc: 'Independent User (Threshold)', score: '41-60', color: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' },
                   { level: 'A2', desc: 'Basic User (Waystage)', score: '21-40', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
@@ -226,7 +238,7 @@ export default async function LandingPage() {
                       <span className="font-bold text-lg">{item.level}</span>
                       <span className="text-xs font-light opacity-90">{item.desc}</span>
                     </div>
-                    <span className="text-xs font-semibold">Score: {item.score}</span>
+                    <span className="text-xs font-semibold">Tier: {item.score}</span>
                   </div>
                 ))}
               </div>
@@ -237,8 +249,8 @@ export default async function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-slate-900 py-8 text-center text-xs text-slate-500">
-        <p>&copy; {new Date().getFullYear()} LinguaCert AI. All rights reserved.</p>
-        <p className="mt-2 text-slate-600 font-light">Built for standardized, verifiable language assessment.</p>
+        <p>&copy; {new Date().getFullYear()} LingoMetric. All rights reserved.</p>
+        <p className="mt-2 text-slate-600 font-light">Know Your English Level • Diagnostic proficiency assessment platform.</p>
       </footer>
     </div>
   )

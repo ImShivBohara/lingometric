@@ -88,9 +88,14 @@ export default async function DashboardPage() {
             <div className="p-1.5 bg-indigo-600/15 border border-indigo-500/30 rounded-lg">
               <BrainCircuit className="h-5 w-5 text-indigo-400" />
             </div>
-            <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-              LinguaCert AI
-            </span>
+            <div className="flex flex-col">
+              <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent leading-none">
+                LingoMetric
+              </span>
+              <span className="text-[10px] text-slate-500 font-medium tracking-wide">
+                Know Your English Level
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center space-x-4">
@@ -120,14 +125,14 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="bg-slate-900/50 border-slate-800 text-white">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs text-slate-400 font-semibold tracking-wider uppercase">Active CEFR Level</span>
+              <span className="text-xs text-slate-400 font-semibold tracking-wider uppercase">Indicative CEFR</span>
               <Award className="h-5 w-5 text-indigo-400" />
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-extrabold text-white">
                 {profile?.current_cefr_level || 'B1'}
               </div>
-              <p className="text-xs text-slate-500 mt-1">Starting reference tier</p>
+              <p className="text-xs text-slate-500 mt-1">Provisional reference tier</p>
             </CardContent>
           </Card>
 
@@ -159,7 +164,7 @@ export default async function DashboardPage() {
 
           <Card className="bg-slate-900/50 border-slate-800 text-white">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs text-slate-400 font-semibold tracking-wider uppercase">CEFR Evaluations</span>
+              <span className="text-xs text-slate-400 font-semibold tracking-wider uppercase">Evaluated Assessments</span>
               <ShieldCheck className="h-5 w-5 text-emerald-400" />
             </CardHeader>
             <CardContent>

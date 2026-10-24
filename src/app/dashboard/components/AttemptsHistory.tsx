@@ -186,11 +186,11 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
       <div className="flex items-center space-x-6">
         <div className="text-right">
           <div className="font-bold text-indigo-400">{scoreDisplay}</div>
-          <div className="text-xs text-slate-500 uppercase tracking-wider">Score</div>
+          <div className="text-xs text-slate-500 uppercase tracking-wider">Score (%)</div>
         </div>
         <div className="text-right">
           <div className="font-bold text-emerald-400">{cefrDisplay}</div>
-          <div className="text-xs text-slate-500 uppercase tracking-wider">CEFR</div>
+          <div className="text-xs text-slate-500 uppercase tracking-wider">Indicative CEFR</div>
         </div>
 
         {isInProgress && (
@@ -485,6 +485,14 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
         </Card>
       )}
 
+      {/* Provisional Diagnostic Disclaimer Note */}
+      <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-3 text-xs text-slate-500 flex items-center gap-2">
+        <AlertCircle className="h-4 w-4 flex-shrink-0 text-slate-400" />
+        <span>
+          Provisional Diagnostic Scores: Module results reflect indicative skill performance and do not constitute formal, accredited CEFR certificates.
+        </span>
+      </div>
+
       {/* Discard Confirmation Dialog */}
       <Dialog open={Boolean(discardAttemptId)} onOpenChange={(open) => !open && setDiscardAttemptId(null)}>
         <DialogContent className="max-w-md bg-slate-900 border border-slate-800 text-slate-100 p-6 rounded-2xl shadow-2xl">
@@ -539,13 +547,18 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
                     </DialogTitle>
                   </div>
                   <div className="flex items-center space-x-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-xs font-bold font-mono">
-                    CEFR: {selectedEval.cefrLevel}
+                    Indicative CEFR: {selectedEval.cefrLevel}
                   </div>
                 </div>
                 <DialogDescription className="text-slate-400 text-xs mt-1">
-                  Submitted on {formatDate(selectedEval.attemptDate)}
+                  Submitted on {formatDate(selectedEval.attemptDate)} • Provisional assessment evaluation
                 </DialogDescription>
               </DialogHeader>
+
+              {/* Provisional Note */}
+              <div className="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-[11px] text-slate-400 leading-relaxed">
+                Provisional Diagnostic: Scores reflect an indicative performance rating on this module and do not represent formal institutional certification.
+              </div>
 
               {/* Score breakdown metrics grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

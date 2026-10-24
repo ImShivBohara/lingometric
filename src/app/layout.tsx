@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'LinguaCert AI | English Proficiency Testing Platform',
-  description: 'Instant, adaptive, and verifiable CEFR-standardized English proficiency certification powered by AI.',
+  title: 'LingoMetric | Know Your English Level',
+  description: 'AI-powered English proficiency testing across Reading, Listening, Writing, and Speaking with transparent CEFR-aligned diagnostic scoring.',
 }
 
 export default function RootLayout({

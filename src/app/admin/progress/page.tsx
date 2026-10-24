@@ -131,7 +131,7 @@ export default async function StudentProgressPage({ searchParams }: PageProps) {
               <thead>
                 <tr className="bg-slate-950/60 border-b border-slate-850 text-slate-400 font-mono uppercase font-bold tracking-wider">
                   <th className="px-6 py-4">Student</th>
-                  <th className="px-6 py-4 text-center">Current CEFR</th>
+                  <th className="px-6 py-4 text-center">Indicative CEFR</th>
                   <th className="px-6 py-4 text-center">Total Attempts</th>
                   <th className="px-6 py-4">Last Active</th>
                   <th className="px-6 py-4 text-right">Action</th>

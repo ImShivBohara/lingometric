@@ -10,10 +10,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <div className="w-full max-w-md z-10">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-blue-400 via-indigo-400 to-emerald-400 bg-clip-text text-transparent">
-            LinguaCert AI
+            LingoMetric
           </h1>
           <p className="text-slate-400 mt-2 text-sm">
-            AI-powered English Proficiency Testing Platform
+            Know Your English Level
           </p>
         </div>
         {children}

@@ -152,7 +152,7 @@ export default function WritingPlayer({ attemptId, prompt }: WritingPlayerProps)
           </div>
           <div>
             <h1 className="text-lg font-bold tracking-tight bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-              LinguaCert AI
+              LingoMetric
             </h1>
             <p className="text-xs text-slate-500 font-medium">Writing Evaluation Platform</p>
           </div>

@@ -55,7 +55,7 @@ export default function AdminSidebar({ profile }: AdminSidebarProps) {
           </div>
           <div>
             <h1 className="text-base font-bold tracking-tight bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-              LinguaCert Admin
+              LingoMetric Admin
             </h1>
             <p className="text-[10px] text-slate-500 font-mono font-bold uppercase tracking-wider">Management</p>
           </div>

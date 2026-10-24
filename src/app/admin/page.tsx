@@ -43,7 +43,7 @@ export default async function AdminDashboardPage() {
           Admin Control Center
         </h1>
         <p className="text-sm text-slate-400 mt-2">
-          Welcome to the LinguaCert AI Admin Control Center. Access routing guards and administration panels.
+          Welcome to the LingoMetric Admin Control Center. Manage skill questions, tests, and student analytics.
         </p>
       </div>
 

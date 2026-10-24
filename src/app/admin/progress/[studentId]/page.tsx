@@ -239,7 +239,7 @@ export default async function StudentDetailDashboardPage({ params }: Props) {
         </div>
         <div className="flex gap-3">
           <div className="bg-slate-950/60 border border-slate-850 px-4 py-2.5 rounded-xl text-center">
-            <div className="text-[10px] text-slate-500 font-bold tracking-wider uppercase font-mono">Current CEFR</div>
+            <div className="text-[10px] text-slate-500 font-bold tracking-wider uppercase font-mono">Indicative CEFR</div>
             <div className="text-base font-bold text-emerald-400">{currentCEFR}</div>
           </div>
           <div className="bg-slate-950/60 border border-slate-850 px-4 py-2.5 rounded-xl text-center">
@@ -265,7 +265,7 @@ export default async function StudentDetailDashboardPage({ params }: Props) {
             <CardHeader className="pb-3 border-b border-slate-800">
               <CardTitle className="text-sm font-semibold text-white flex items-center gap-2">
                 <TrendingUp className="h-4 w-4 text-indigo-400" />
-                <span>CEFR Progression Timeline</span>
+                <span>Indicative CEFR Progression</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-4">

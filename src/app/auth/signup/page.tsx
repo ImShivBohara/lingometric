@@ -23,7 +23,7 @@ export default function SignupPage() {
       <CardHeader>
         <CardTitle className="text-xl text-center font-bold">Create Account</CardTitle>
         <CardDescription className="text-center text-slate-400">
-          Get certified on CEFR English scales today
+          Know your English level with diagnostic assessments
         </CardDescription>
       </CardHeader>
       
