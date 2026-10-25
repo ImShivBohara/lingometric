@@ -1,3 +1,4 @@
+import { groupAssessmentAttempts } from '@/features/testing/assessmentSession'
 import React from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
@@ -34,15 +35,15 @@ export default async function StudentProgressPage({ searchParams }: PageProps) {
   }
 
   // 2. Fetch attempts for stats
-  type ShortAttempt = Pick<Attempt, 'id' | 'user_id' | 'status' | 'started_at' | 'submitted_at' | 'cefr_level'>
+  type ShortAttempt = Pick<Attempt, 'id' | 'user_id' | 'status' | 'started_at' | 'submitted_at' | 'cefr_level' | 'session_id'>
   let attempts: ShortAttempt[] = []
   if (students && students.length > 0) {
     const studentIds = students.map((s) => s.id)
     const { data: attemptsData, error: attemptsError } = await supabase
       .from('attempts')
-      .select('id, user_id, status, started_at, submitted_at, cefr_level')
+      .select('id, user_id, status, started_at, submitted_at, cefr_level, session_id')
       .in('user_id', studentIds)
-      .order('submitted_at', { ascending: false })
+      .order('started_at', { ascending: false })
 
     if (attemptsError) {
       console.error('Error fetching attempts:', attemptsError.message)
@@ -56,7 +57,8 @@ export default async function StudentProgressPage({ searchParams }: PageProps) {
     const userAttempts = attempts.filter((a) => a.user_id === student.id)
     const submittedAttempts = userAttempts.filter((a) => a.status === 'SUBMITTED')
 
-    const lastActivityAttempt = userAttempts[0]
+    const lastActivityAttempt = [...userAttempts].sort((a, b) =>
+      new Date(b.submitted_at || b.started_at).getTime() - new Date(a.submitted_at || a.started_at).getTime())[0]
     const lastActivityDate = lastActivityAttempt
       ? new Date(lastActivityAttempt.submitted_at || lastActivityAttempt.started_at).toLocaleDateString(undefined, {
           year: 'numeric',
@@ -69,7 +71,7 @@ export default async function StudentProgressPage({ searchParams }: PageProps) {
 
     return {
       ...student,
-      totalAttempts: userAttempts.length,
+      totalAttempts: groupAssessmentAttempts(userAttempts).length,
       lastActivityDate,
       currentCEFR,
     }

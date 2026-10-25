@@ -1,3 +1,4 @@
+import { summarizeSession } from './assessmentSession'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { Attempt, AttemptStatus, SectionType } from '@/types/database.types'
@@ -82,7 +83,7 @@ export function asSectionType(value: string | null | undefined): SectionType | n
   return parseAssessmentType(value)
 }
 
-export function enforceAttemptPlayerAccess(attempt: Attempt & AttemptSkillEvidence, expectedType: AssessmentType) {
+export async function enforceAttemptPlayerAccess(attempt: Attempt & AttemptSkillEvidence, expectedType: AssessmentType) {
   if (attempt.status === 'DISCARDED') {
     redirect('/dashboard')
   }
@@ -91,6 +92,16 @@ export function enforceAttemptPlayerAccess(attempt: Attempt & AttemptSkillEviden
     redirect(`/test/${attempt.id}/results`)
   }
 
+  if (attempt.session_id) {
+    const supabase = await createClient()
+    const { data: sections, error } = await supabase.from('attempts').select('*')
+      .eq('session_id', attempt.session_id).eq('user_id', attempt.user_id)
+    if (error || !sections) throw new Error('Could not load assessment session')
+    const summary = summarizeSession(sections)
+    if (summary.discarded) redirect('/dashboard')
+    const path = getResumePath(attempt.id, expectedType)
+    if (summary.nextPath && summary.nextPath !== path) redirect(summary.nextPath)
+  }
   const resolvedType = parseAssessmentType(attempt.assessment_type) ?? resolveAttemptSkill(attempt)
   if (!resolvedType || resolvedType === 'Unknown') {
     redirect('/dashboard')

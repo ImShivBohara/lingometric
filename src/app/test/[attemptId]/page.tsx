@@ -35,7 +35,7 @@ export default async function TestAttemptPage({ params }: PageProps) {
     redirect('/dashboard')
   }
 
-  enforceAttemptPlayerAccess(attempt as Attempt, 'Reading')
+  await enforceAttemptPlayerAccess(attempt as Attempt, 'Reading')
 
   const { data: sections, error: sectionsError } = await supabase
     .from('sections')

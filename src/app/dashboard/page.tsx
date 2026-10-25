@@ -4,6 +4,8 @@ import { getUserProfile } from '@/lib/supabase/queries'
 import { logoutAction } from '@/features/auth/actions'
 import { createTestAttemptAction } from '@/features/testing/actions'
 import { highestSubmittedScore, resolveAttemptSkill } from '@/features/testing/attemptIdentity'
+import Link from 'next/link'
+import { groupAssessmentAttempts, summarizeSession } from '@/features/testing/assessmentSession'
 import AttemptsHistory from './components/AttemptsHistory'
 import { 
   Trophy, 
@@ -61,21 +63,26 @@ export default async function DashboardPage() {
     'Speaking'
   )
 
-  const completedAttempts = (attempts || []).filter((a) => a.status === 'SUBMITTED')
-  const highestScore = highestSubmittedScore(attempts || [])
+  const assessmentGroups = groupAssessmentAttempts(attempts || [])
+  const completedAttempts = assessmentGroups.filter(group => group[0].session_id
+    ? summarizeSession(group).complete : group[0].status === 'SUBMITTED')
+  const scoredAttempts = completedAttempts.map(group => ({ status: 'SUBMITTED', final_score:
+    group[0].session_id ? summarizeSession(group).score : group[0].final_score }))
+  const highestScore = highestSubmittedScore(scoredAttempts)
   const highestScoreDisplay = highestScore !== null ? String(highestScore) : 'N/A'
-  const evaluatedAttemptsCount = completedAttempts.filter((a) => Boolean(a.cefr_level)).length
+  const evaluatedAttemptsCount = completedAttempts.filter(group => group.every(a => Boolean(a.cefr_level))).length
 
-  const inProgressReading = (attempts || []).find(
+  const legacyAttempts = (attempts || []).filter(a => !a.session_id)
+  const inProgressReading = legacyAttempts.find(
     (a) => a.status === 'IN_PROGRESS' && resolveAttemptSkill(a) === 'Reading'
   )
-  const inProgressListening = (attempts || []).find(
+  const inProgressListening = legacyAttempts.find(
     (a) => a.status === 'IN_PROGRESS' && resolveAttemptSkill(a) === 'Listening'
   )
-  const inProgressWriting = (attempts || []).find(
+  const inProgressWriting = legacyAttempts.find(
     (a) => a.status === 'IN_PROGRESS' && resolveAttemptSkill(a) === 'Writing'
   )
-  const inProgressSpeaking = (attempts || []).find(
+  const inProgressSpeaking = legacyAttempts.find(
     (a) => a.status === 'IN_PROGRESS' && resolveAttemptSkill(a) === 'Speaking'
   )
 
@@ -176,9 +183,15 @@ export default async function DashboardPage() {
           </Card>
         </div>
 
+        <Card className="border-indigo-500/40 bg-slate-900 text-white">
+          <CardHeader><CardTitle>Complete English Assessment</CardTitle>
+            <CardDescription>Reading → Listening → Writing → Speaking. One combined result after all four sections.</CardDescription>
+          </CardHeader>
+          <CardContent><Link href="/test" className="inline-flex rounded-lg bg-indigo-600 px-5 py-3 font-semibold text-white">Start or Resume Full Assessment</Link></CardContent>
+        </Card>
         {/* Available Assessments */}
         <div className="space-y-4">
-          <h2 className="text-xl font-bold text-white">Available Skill Assessments</h2>
+          <h2 className="text-xl font-bold text-white">Individual Skill Practice (Optional)</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             
             {/* Reading card */}

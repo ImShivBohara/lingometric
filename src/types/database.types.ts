@@ -81,6 +81,7 @@ export interface SpeakingPrompt {
 }
 
 export interface Attempt {
+  session_id?: string | null;
   id: string;
   user_id: string;
   test_id: string;

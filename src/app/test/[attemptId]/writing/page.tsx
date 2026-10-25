@@ -35,7 +35,7 @@ export default async function WritingAttemptPage({ params }: PageProps) {
     redirect('/dashboard')
   }
 
-  enforceAttemptPlayerAccess(attempt as Attempt, 'Writing')
+  await enforceAttemptPlayerAccess(attempt as Attempt, 'Writing')
 
   // Fetch the section metadata matching the active test context and Writing type
   const { data: section, error: sectionError } = await supabase

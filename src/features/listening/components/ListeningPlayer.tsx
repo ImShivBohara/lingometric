@@ -75,6 +75,7 @@ export default function ListeningPlayer({
   const [currentTime, setCurrentTime] = useState(0)
   const [audioDuration, setAudioDuration] = useState(0)
   const lastTimeRef = useRef(0)
+  const [audioError, setAudioError] = useState<string | null>(null)
 
   const currentQuestion = allQuestions[currentIndex]
   const activePassage = currentQuestion?.passage
@@ -101,26 +102,36 @@ export default function ListeningPlayer({
     const timer = setTimeout(() => {
       setIsPlaying(false)
       setCurrentTime(0)
+      setAudioDuration(0)
+      setAudioError(null)
     }, 0)
-    lastTimeRef.current = 0
     
+    lastTimeRef.current = 0
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current.load()
     }
     return () => clearTimeout(timer)
-  }, [activePassage?.id])
+  }, [activePassage?.id, activePassage?.audio_url])
 
   const togglePlayback = () => {
     if (!audioRef.current) return
 
+    const audio = audioRef.current
+    setAudioError(null)
     if (isPlaying) {
       audioRef.current.pause()
       setIsPlaying(false)
     } else {
-      audioRef.current.play()
-        .then(() => setIsPlaying(true))
+      if (audio.ended) {
+        lastTimeRef.current = 0
+        audio.currentTime = 0
+      }
+      audio.play()
+        .then(() => { if (audioRef.current === audio) setIsPlaying(true) })
         .catch((err) => {
+          if (audioRef.current !== audio || err.name === 'AbortError') return
+          setAudioError('Audio could not be played. Retry or ask your administrator to check the passage audio.')
           console.error('Playback failed:', err)
           toast.error('Could not play audio. Please check your connection.')
         })
@@ -130,28 +141,27 @@ export default function ListeningPlayer({
   const handleTimeUpdate = () => {
     if (!audioRef.current) return
 
-    const audio = audioRef.current
-    const diff = audio.currentTime - lastTimeRef.current
+    // timeupdate events can be delayed in background tabs; they are not seeks.
+    if (!audioRef.current.seeking) lastTimeRef.current = audioRef.current.currentTime
+    setCurrentTime(audioRef.current.currentTime)
+  }
 
-    // Strict Seeking/Rewinding prevention:
-    // If a user jumps forward or backward by more than 1.5 seconds, we snap them back.
-    if (diff < 0 || diff > 1.5) {
+  const handleSeeking = () => {
+    const audio = audioRef.current
+    if (audio && Math.abs(audio.currentTime - lastTimeRef.current) > 0.5) {
       audio.currentTime = lastTimeRef.current
-    } else {
-      lastTimeRef.current = audio.currentTime
-      setCurrentTime(audio.currentTime)
     }
-  };
+  }
 
   const handleLoadedMetadata = () => {
     if (audioRef.current) {
-      setAudioDuration(audioRef.current.duration || activePassage?.duration_seconds || 0)
+      setAudioDuration(Number.isFinite(audioRef.current.duration) ? audioRef.current.duration : activePassage?.duration_seconds || 0)
     }
   }
 
   const handleAudioEnded = () => {
     setIsPlaying(false)
-    setCurrentTime(activePassage?.duration_seconds || audioDuration)
+    setCurrentTime(audioDuration || activePassage?.duration_seconds || 0)
   }
 
   const formatTime = (seconds: number) => {
@@ -275,10 +285,18 @@ export default function ListeningPlayer({
       
       {/* Hidden HTML5 Audio Element */}
       <audio
+        key={`${activePassage.id}:${activePassage.audio_url}`}
         ref={audioRef}
+        preload="metadata"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onError={() => {
+          setIsPlaying(false)
+          setAudioError('This passage audio could not be loaded. Check your connection or ask your administrator to replace the audio file.')
+        }}
         src={activePassage.audio_url}
         onTimeUpdate={handleTimeUpdate}
-        onSeeking={handleTimeUpdate}
+        onSeeking={handleSeeking}
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={handleAudioEnded}
       />
@@ -379,6 +397,7 @@ export default function ListeningPlayer({
               <div className="flex items-center justify-center gap-4 pt-2">
                 <button
                   type="button"
+                  aria-label={isPlaying ? 'Pause passage audio' : 'Play passage audio'}
                   onClick={togglePlayback}
                   className={`p-4 rounded-full border shadow-md flex items-center justify-center transition duration-200 ${
                     isPlaying 
@@ -399,11 +418,15 @@ export default function ListeningPlayer({
                   {isPlaying ? 'Streaming Audio File...' : currentTime > 0 ? 'Audio Paused' : 'Ready to Play'}
                 </p>
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Play and pause are enabled. Rewinding or seeking is blocked.
+                  Play and pause are enabled. Seeking is blocked; replay is available after the audio ends.
                 </p>
               </div>
             </div>
 
+            {audioError && <div role="alert" className="rounded-xl border border-rose-500/50 p-4 text-sm text-rose-300">
+              <p>{audioError}</p>
+              <Button type="button" className="mt-3" onClick={() => { setAudioError(null); audioRef.current?.load() }}>Retry Audio</Button>
+            </div>}
             {/* Instructions box */}
             <div className="bg-slate-950/40 border border-slate-900 rounded-xl p-4 text-xs text-slate-400 flex items-start space-x-2.5">
               <AlertCircle className="h-4 w-4 text-indigo-400 mt-0.5 flex-shrink-0" />

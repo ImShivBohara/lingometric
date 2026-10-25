@@ -1,4 +1,7 @@
 import React from 'react'
+import FullAssessmentResult from '@/features/testing/components/FullAssessmentResult'
+import GradingScale from '@/features/testing/components/GradingScale'
+import { summarizeSession } from '@/features/testing/assessmentSession'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -29,9 +32,10 @@ import {
 
 interface ResultsPageProps {
   params: Promise<{ attemptId: string }>
+  searchParams: Promise<{ section?: string }>
 }
 
-export default async function TestResultsPage({ params }: ResultsPageProps) {
+export default async function TestResultsPage({ params, searchParams }: ResultsPageProps) {
   const { attemptId } = await params
   const supabase = await createClient()
 
@@ -59,6 +63,19 @@ export default async function TestResultsPage({ params }: ResultsPageProps) {
 
   if (attempt.status === 'DISCARDED') {
     redirect('/dashboard')
+  }
+
+  if (attempt.session_id) {
+    const { data: sections, error } = await supabase.from('attempts').select('*')
+      .eq('session_id', attempt.session_id).eq('user_id', user.id)
+    if (error || !sections) throw new Error('Could not load full assessment results')
+    const summary = summarizeSession(sections)
+    if (summary.discarded) redirect('/dashboard')
+    if (!summary.complete) {
+      if (summary.nextPath) redirect(summary.nextPath)
+      throw new Error('Assessment session has missing sections')
+    }
+    if ((await searchParams).section !== '1') return <FullAssessmentResult attempts={sections} />
   }
 
   if (attempt.status !== 'SUBMITTED') {
@@ -150,6 +167,7 @@ export default async function TestResultsPage({ params }: ResultsPageProps) {
                 </div>
               </div>
 
+              <GradingScale skill={parseAssessmentType(attempt.assessment_type) ?? undefined} level={attempt.cefr_level} score={attempt.final_score} />
               {/* Provisional Diagnostic Disclaimer */}
               <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 flex items-start gap-3 text-xs text-slate-400">
                 <Info className="h-4 w-4 text-rose-400 mt-0.5 flex-shrink-0" />
@@ -342,6 +360,7 @@ export default async function TestResultsPage({ params }: ResultsPageProps) {
                 </div>
               </div>
 
+              <GradingScale skill={parseAssessmentType(attempt.assessment_type) ?? undefined} level={attempt.cefr_level} score={attempt.final_score} />
               {/* Provisional Diagnostic Disclaimer */}
               <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 flex items-start gap-3 text-xs text-slate-400">
                 <Info className="h-4 w-4 text-violet-400 mt-0.5 flex-shrink-0" />
@@ -441,6 +460,7 @@ export default async function TestResultsPage({ params }: ResultsPageProps) {
                 </div>
               </div>
 
+              <GradingScale skill={parseAssessmentType(attempt.assessment_type) ?? undefined} level={attempt.cefr_level} score={attempt.final_score} />
               {/* Provisional Diagnostic Disclaimer */}
               <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 flex items-start gap-3 text-xs text-slate-400">
                 <Info className="h-4 w-4 text-emerald-400 mt-0.5 flex-shrink-0" />
@@ -618,7 +638,8 @@ export default async function TestResultsPage({ params }: ResultsPageProps) {
               </div>
             </div>
 
-            {/* Provisional Diagnostic Disclaimer */}
+            <GradingScale skill={parseAssessmentType(attempt.assessment_type) ?? undefined} level={attempt.cefr_level} score={attempt.final_score} />
+              {/* Provisional Diagnostic Disclaimer */}
             <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 flex items-start gap-3 text-xs text-slate-400">
               <Info className="h-4 w-4 text-indigo-400 mt-0.5 flex-shrink-0" />
               <span className="leading-relaxed">{PROVISIONAL_GRADING_DISCLAIMER}</span>

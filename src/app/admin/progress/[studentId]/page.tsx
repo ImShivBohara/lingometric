@@ -1,3 +1,6 @@
+import SessionHistory from '@/features/testing/components/SessionHistory'
+import { groupAssessmentAttempts, summarizeSession } from '@/features/testing/assessmentSession'
+import { resolveAttemptSkill } from '@/features/testing/attemptIdentity'
 import React from 'react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -166,12 +169,14 @@ export default async function StudentDetailDashboardPage({ params }: Props) {
   )
 
   // 4. Compute student aggregate statistics in-memory
-  const totalAttempts = attempts.length
+  const assessmentGroups = groupAssessmentAttempts(attempts)
+  const totalAttempts = assessmentGroups.length
+  const completedGroups = assessmentGroups.filter(group => group[0].session_id ? summarizeSession(group).complete : group[0].status === 'SUBMITTED')
   const submittedAttempts = attempts.filter((a) => a.status === 'SUBMITTED')
-  const completionRate = totalAttempts > 0 ? Math.round((submittedAttempts.length / totalAttempts) * 100) : 0
-  const averageScore = submittedAttempts.length > 0
-    ? Math.round(submittedAttempts.reduce((acc: number, a) => acc + Number(a.final_score || 0), 0) / submittedAttempts.length)
-    : 0
+  const completionRate = totalAttempts > 0 ? Math.round((completedGroups.length / totalAttempts) * 100) : 0
+  const scores = completedGroups.map(group => group[0].session_id ? summarizeSession(group).score : group[0].final_score)
+    .filter((score): score is number => score != null)
+  const averageScore = scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 0
   const currentCEFR = submittedAttempts[0]?.cefr_level || (student as UserProfile).current_cefr_level || 'N/A'
 
   // Chronological list of submitted attempts for progression timeline
@@ -183,13 +188,13 @@ export default async function StudentDetailDashboardPage({ params }: Props) {
   }
 
   // Reading stats
-  const readingAttempts = attempts.filter((a) => a.responses && a.responses.length > 0)
+  const readingAttempts = submittedAttempts.filter((a) => resolveAttemptSkill(a) === 'Reading')
   const allReadingResponses = readingAttempts.flatMap((a) => a.responses || [])
   const correctReadingCount = allReadingResponses.filter((r) => r.is_correct).length
   const avgReadingScore = calculateAverage(readingAttempts.map((a) => Number(a.final_score || 0)))
 
   // Listening stats
-  const listeningAttempts = attempts.filter((a) => a.listening_responses && a.listening_responses.length > 0)
+  const listeningAttempts = submittedAttempts.filter((a) => resolveAttemptSkill(a) === 'Listening')
   const allListeningResponses = listeningAttempts.flatMap((a) => a.listening_responses || [])
   const correctListeningCount = allListeningResponses.filter((r) => r.is_correct).length
   const avgListeningScore = calculateAverage(listeningAttempts.map((a) => Number(a.final_score || 0)))
@@ -400,7 +405,8 @@ export default async function StudentDetailDashboardPage({ params }: Props) {
 
         {/* Right column: Expandable Attempt Details */}
         <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-base font-bold text-white">Assessment Attempt History</h2>
+          <SessionHistory attempts={attempts} admin />
+          <h2 className="text-base font-bold text-white">Section Attempt Details</h2>
 
           {attempts.length === 0 ? (
             <Card className="border-slate-800 bg-slate-900/60 p-6 text-center text-slate-500 text-xs">
@@ -413,8 +419,8 @@ export default async function StudentDetailDashboardPage({ params }: Props) {
               const readingResponses = attempt.responses || []
               const listeningResponses = attempt.listening_responses || []
 
-              const isReadingAttempt = readingResponses.length > 0
-              const isListeningAttempt = listeningResponses.length > 0
+              const isReadingAttempt = resolveAttemptSkill(attempt) === 'Reading'
+              const isListeningAttempt = resolveAttemptSkill(attempt) === 'Listening'
 
               const attemptDate = new Date(attempt.submitted_at || attempt.started_at).toLocaleString(undefined, {
                 year: 'numeric',
@@ -433,6 +439,7 @@ export default async function StudentDetailDashboardPage({ params }: Props) {
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-4">
                       <div>
                         <div className="text-white font-bold">{attempt.tests?.title || 'Unknown Test'}</div>
+                        {attempt.session_id && <div className="text-[10px] text-slate-400">Full assessment: {attempt.session_id}</div>}
                         <div className="text-[10px] text-slate-500 font-mono">{attemptDate}</div>
                       </div>
                       <div className="flex items-center gap-1.5">

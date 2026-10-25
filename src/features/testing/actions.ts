@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { summarizeSession } from './assessmentSession'
 import { getOwnedAttempt, assertModifiableAttempt } from './attemptAccess'
 import {
   AssessmentType,
@@ -49,6 +50,7 @@ export async function createTestAttemptAction(
     .eq('test_id', testId)
     .eq('status', 'IN_PROGRESS')
     .eq('assessment_type', assessmentType)
+    .is('session_id', null)
     .order('started_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -259,4 +261,20 @@ export async function discardAttemptAction(attemptId: string) {
 
   revalidatePath('/dashboard')
   return { success: true }
+}
+
+/** Start all four skill attempts atomically, or resume the existing session. */
+export async function createFullAssessmentAction(testId: string) {
+  if (!VALID_TEST_ID.test(testId)) throw new Error('A valid test identifier is required')
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/auth/login')
+  const { data: sessionId, error } = await supabase.rpc('start_full_assessment', { p_test_id: testId })
+  if (error || !sessionId) throw new Error(error?.message || 'Could not start assessment')
+  const { data: sections, error: sectionsError } = await supabase.from('attempts')
+    .select('*').eq('session_id', sessionId).eq('user_id', user.id)
+  if (sectionsError || !sections?.length) throw new Error('Could not load assessment sections')
+  const { nextPath } = summarizeSession(sections)
+  revalidatePath('/dashboard')
+  redirect(nextPath || `/test/${sections[0].id}/results`)
 }

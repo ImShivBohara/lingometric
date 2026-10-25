@@ -1,3 +1,4 @@
+import { groupAssessmentAttempts } from '@/features/testing/assessmentSession'
 import React from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,9 +8,10 @@ export default async function AdminDashboardPage() {
   const supabase = await createClient()
 
   // Run database count queries (attempts count requires Admin SELECT policy)
-  const { count: usersCount } = await supabase.from('users').select('*', { count: 'exact', head: true })
+  const { count: usersCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student')
   const { count: testsCount } = await supabase.from('tests').select('*', { count: 'exact', head: true })
-  const { count: attemptsCount } = await supabase.from('attempts').select('*', { count: 'exact', head: true })
+  const { data: attempts } = await supabase.from('attempts').select('id, session_id')
+  const attemptsCount = groupAssessmentAttempts(attempts || []).length
 
   const stats = [
     {

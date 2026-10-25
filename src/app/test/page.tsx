@@ -5,7 +5,7 @@ import { ChevronLeft, Award, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
-import { createTestAttemptAction } from '@/features/testing/actions'
+import { createFullAssessmentAction } from '@/features/testing/actions'
 
 export default async function TestPage() {
   const supabase = await createClient()
@@ -17,7 +17,7 @@ export default async function TestPage() {
     return null
   }
 
-  const startAction = createTestAttemptAction.bind(null, 'a4d70c5e-d63c-4384-a327-ee556c77d870', 'Reading')
+  const startAction = createFullAssessmentAction.bind(null, 'a4d70c5e-d63c-4384-a327-ee556c77d870')
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center px-4 relative overflow-hidden">
@@ -38,7 +38,7 @@ export default async function TestPage() {
             </div>
             <CardTitle className="text-2xl font-extrabold text-white">English Proficiency Assessment</CardTitle>
             <CardDescription className="text-slate-400 text-sm max-w-md mx-auto">
-              This assessment evaluates your Reading skills dynamically using standardized CEFR scales.
+              Complete Reading, Listening, Writing and Speaking in one assessment. Your combined result appears after all four sections.
             </CardDescription>
           </CardHeader>
 
@@ -46,7 +46,7 @@ export default async function TestPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-b border-slate-800 py-6 my-4">
               <div className="space-y-1">
                 <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Format</span>
-                <p className="font-semibold text-white">Reading Section (MVP)</p>
+                <p className="font-semibold text-white">Reading → Listening → Writing → Speaking</p>
               </div>
               <div className="space-y-1">
                 <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Starting Level</span>
@@ -54,7 +54,7 @@ export default async function TestPage() {
               </div>
               <div className="space-y-1">
                 <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Estimated Time</span>
-                <p className="font-semibold text-white">~10 Minutes</p>
+                <p className="font-semibold text-white">Approximately 45–60 minutes</p>
               </div>
               <div className="space-y-1">
                 <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Scoring</span>
@@ -66,7 +66,7 @@ export default async function TestPage() {
               <p className="font-semibold text-slate-300">Important Instructions:</p>
               <ul className="list-disc pl-5 space-y-1">
                 <li>Read each question and select the correct answer.</li>
-                <li>Do not reload or navigate away from the test.</li>
+                <li>Saved answers can be resumed from your dashboard.</li>
                 <li>Your time spent per question is tracked for performance diagnostics.</li>
               </ul>
             </div>

@@ -44,6 +44,8 @@ export default function PassageForm({ sections, initialData }: PassageFormProps)
   const [durationSeconds, setDurationSeconds] = useState(initialData?.duration_seconds || 60)
   const [audioUrl, setAudioUrl] = useState(initialData?.audio_url || '')
   
+  const [audioReady, setAudioReady] = useState(false)
+  const [audioError, setAudioError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -56,8 +58,32 @@ export default function PassageForm({ sections, initialData }: PassageFormProps)
       return
     }
 
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Audio files must be 10 MB or smaller.')
+      return
+    }
     setIsUploading(true)
     try {
+      // Verify browser support and duration before storing an unusable track.
+      const localUrl = URL.createObjectURL(file)
+      let measuredDuration: number
+      try {
+        measuredDuration = await new Promise<number>((resolve, reject) => {
+          const preview = new Audio()
+          const cleanup = () => { clearTimeout(timeout); preview.removeAttribute('src'); preview.load() }
+          const timeout = setTimeout(() => { cleanup(); reject(new Error('Audio validation timed out.')) }, 15000)
+          preview.onloadedmetadata = () => {
+            const duration = preview.duration
+            cleanup()
+            if (Number.isFinite(duration) && duration > 0) resolve(duration)
+            else reject(new Error('The audio has no valid duration. Please use MP3 or WAV.'))
+          }
+          preview.onerror = () => { cleanup(); reject(new Error('This browser cannot decode the audio file. Please use MP3 or WAV.')) }
+          preview.src = localUrl
+        })
+      } finally {
+        URL.revokeObjectURL(localUrl)
+      }
       const supabase = createClient()
       
       // Generate clean filename
@@ -82,19 +108,9 @@ export default function PassageForm({ sections, initialData }: PassageFormProps)
 
       setAudioUrl(loadedUrl)
       
-      // Auto-populate duration if audio file supports it
-      const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
-      const fileReader = new FileReader()
-      fileReader.onload = async () => {
-        try {
-          const buffer = fileReader.result as ArrayBuffer
-          const decoded = await audioCtx.decodeAudioData(buffer)
-          setDurationSeconds(Math.round(decoded.duration))
-        } catch {
-          // ignore parsing duration fallback
-        }
-      }
-      fileReader.readAsArrayBuffer(file)
+      setDurationSeconds(Math.ceil(measuredDuration))
+      setAudioReady(false)
+      setAudioError(null)
 
       toast.success('Audio file uploaded successfully!')
     } catch (err: unknown) {
@@ -117,7 +133,11 @@ export default function PassageForm({ sections, initialData }: PassageFormProps)
       toast.error('Please upload an audio file or provide a public audio URL.')
       return
     }
-    if (durationSeconds <= 0) {
+    if (!audioReady) {
+      toast.error('Wait for the audio preview to load successfully before saving.')
+      return
+    }
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
       toast.error('Please provide a valid audio duration.')
       return
     }
@@ -228,6 +248,20 @@ export default function PassageForm({ sections, initialData }: PassageFormProps)
             </div>
           </div>
 
+          {audioUrl && <div className="space-y-2">
+            <label className="text-sm font-semibold">Preview passage audio before saving</label>
+            <audio key={audioUrl} src={audioUrl} controls preload="metadata" className="w-full"
+              onLoadedMetadata={e => {
+                const duration = e.currentTarget.duration
+                const valid = Number.isFinite(duration) && duration > 0
+                setAudioReady(valid)
+                setAudioError(valid ? null : 'Audio has an invalid duration. Replace this track.')
+                if (valid) setDurationSeconds(Math.ceil(duration))
+              }}
+              onError={() => { setAudioReady(false); setAudioError('Audio cannot be loaded. Check that the URL points to a publicly accessible audio file.') }} />
+            {audioError && <p role="alert" className="text-sm text-rose-400">{audioError}</p>}
+            <p className="text-xs text-slate-400">Play the track and confirm it matches the transcript and questions.</p>
+          </div>}
           {/* Audio Upload Panel */}
           <div className="space-y-2 border-t border-slate-800/60 pt-6">
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
@@ -268,7 +302,7 @@ export default function PassageForm({ sections, initialData }: PassageFormProps)
                 <input
                   type="text"
                   value={audioUrl}
-                  onChange={(e) => setAudioUrl(e.target.value)}
+                  onChange={(e) => { setAudioUrl(e.target.value); setAudioReady(false); setAudioError(null) }}
                   placeholder="https://yourbucket.supabase.co/storage/v1/object/public/..."
                   className="w-full bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 text-slate-100 text-xs focus:border-indigo-500 focus:outline-none placeholder-slate-700"
                 />
@@ -310,7 +344,7 @@ export default function PassageForm({ sections, initialData }: PassageFormProps)
             
             <Button
               type="submit"
-              disabled={isSaving || isUploading}
+              disabled={isSaving || isUploading || !audioReady}
               className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl px-5 py-3 flex items-center space-x-2"
             >
               {isSaving ? (

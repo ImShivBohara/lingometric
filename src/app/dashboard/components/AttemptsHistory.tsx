@@ -1,5 +1,6 @@
 'use client'
 
+import SessionHistory from '@/features/testing/components/SessionHistory'
 import React, { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -69,9 +70,10 @@ const formatDate = (dateString: string) => {
   return new Intl.DateTimeFormat('en-CA').format(new Date(dateString))
 }
 
-export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
+export default function AttemptsHistory({ attempts: allAttempts }: AttemptsHistoryProps) {
+  const attempts = allAttempts.filter(a => !a.session_id)
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<'reading' | 'listening' | 'writing' | 'speaking' | 'unknown'>('reading')
+  const [activeTab, setActiveTab] = useState<'all' | 'reading' | 'listening' | 'writing' | 'speaking' | 'unknown'>('all')
   const [selectedEval, setSelectedEval] = useState<SelectedEvalState | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [discardAttemptId, setDiscardAttemptId] = useState<string | null>(null)
@@ -258,8 +260,10 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
 
   return (
     <div className="space-y-6">
+      <SessionHistory attempts={allAttempts} />
       {/* Tabs */}
       <div className="flex flex-wrap gap-1 border-b border-slate-900 bg-slate-950/40 p-1 rounded-xl w-fit">
+        <button onClick={() => setActiveTab('all')} className={`px-5 py-2 text-xs font-bold rounded-lg ${activeTab === 'all' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>All Skill History ({attempts.length})</button>
         <button
           onClick={() => setActiveTab('reading')}
           className={`px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition ${
@@ -315,6 +319,16 @@ export default function AttemptsHistory({ attempts }: AttemptsHistoryProps) {
       </div>
 
       {/* Reading History Tab */}
+      {activeTab === 'all' && <div className="space-y-3">
+        {attempts.length === 0 && <p className="text-sm text-slate-400">No individual skill attempts yet.</p>}
+        {attempts.map(attempt => <Card key={attempt.id} className="border-slate-800 bg-slate-900/50 p-4 text-slate-200">
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 p-0">
+            <div><p className="font-bold">{resolveAttemptSkill(attempt)} · {attempt.tests?.title || 'Assessment'}</p>
+              <p className="text-xs text-slate-400">{formatDate(attempt.started_at)}</p>{renderStatusBadge(attempt)}</div>
+            {renderScoreAndActions(attempt, resolveAttemptSkill(attempt))}
+          </CardContent>
+        </Card>)}
+      </div>}
       {activeTab === 'reading' && (
         <Card className="bg-slate-900/30 border-slate-900 text-white">
           <CardContent className="pt-6">

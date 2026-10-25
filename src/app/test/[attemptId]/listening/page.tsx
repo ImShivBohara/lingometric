@@ -35,7 +35,7 @@ export default async function ListeningAttemptPage({ params }: PageProps) {
     redirect('/dashboard')
   }
 
-  enforceAttemptPlayerAccess(attempt as Attempt, 'Listening')
+  await enforceAttemptPlayerAccess(attempt as Attempt, 'Listening')
   // 3. Fetch Listening passages assigned to the active test
   let passages: ListeningPassage[] = []
 

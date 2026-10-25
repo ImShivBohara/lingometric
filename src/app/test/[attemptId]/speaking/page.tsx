@@ -35,7 +35,7 @@ export default async function SpeakingAttemptPage({ params }: PageProps) {
     redirect('/dashboard')
   }
 
-  enforceAttemptPlayerAccess(attempt as Attempt, 'Speaking')
+  await enforceAttemptPlayerAccess(attempt as Attempt, 'Speaking')
 
   // 3. Fetch the Speaking section matching the active test context
   const { data: section, error: sectionError } = await supabase
