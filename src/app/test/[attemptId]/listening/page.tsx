@@ -57,9 +57,7 @@ export default async function ListeningAttemptPage({ params }: PageProps) {
           id,
           passage_id,
           question_text,
-          options,
-          correct_answer,
-          explanation
+          options
         )
       )
     `)
@@ -89,8 +87,6 @@ export default async function ListeningAttemptPage({ params }: PageProps) {
             passage_id: string
             question_text: string
             options: unknown
-            correct_answer: string
-            explanation?: string | null
           }[] | null
         }
         return {
@@ -99,15 +95,12 @@ export default async function ListeningAttemptPage({ params }: PageProps) {
           title: rawPassage.title,
           audio_url: rawPassage.audio_url,
           duration_seconds: rawPassage.duration_seconds,
-          transcript: rawPassage.transcript || undefined,
           difficulty_level: rawPassage.difficulty_level,
           questions: (rawPassage.questions || []).map((q) => ({
             id: q.id,
             passage_id: q.passage_id,
             question_text: q.question_text,
             options: q.options,
-            correct_answer: q.correct_answer,
-            explanation: q.explanation || undefined
           }))
         }
       })
@@ -135,15 +128,12 @@ export default async function ListeningAttemptPage({ params }: PageProps) {
         title,
         audio_url,
         duration_seconds,
-        transcript,
         difficulty_level,
         questions:listening_questions (
           id,
           passage_id,
           question_text,
-          options,
-          correct_answer,
-          explanation
+          options
         )
       `)
       .eq('section_id', section.id)

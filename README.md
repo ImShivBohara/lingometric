@@ -2,11 +2,26 @@
 
 > **Know Your English Level** — An AI-powered diagnostic English proficiency assessment platform aligned with the Common European Framework of Reference for Languages (CEFR).
 
+[![Live Application](https://img.shields.io/badge/Live%20Deployment-Vercel-black?logo=vercel)](https://lingometric.vercel.app)
+[![Framework](https://img.shields.io/badge/Framework-Next.js%2016-black?logo=next.js)](https://nextjs.org/)
+[![Database](https://img.shields.io/badge/Database-Supabase%20(PostgreSQL)-3ECF8E?logo=supabase)](https://supabase.com/)
+[![AI Engine](https://img.shields.io/badge/AI%20Engine-Google%20Gemini-4285F4?logo=google)](https://aistudio.google.com/)
+
+---
+
+## 🌐 Live Deployment
+
+LingoMetric is deployed and operational on Vercel:
+
+- **Production URL:** [https://lingometric.vercel.app](https://lingometric.vercel.app)
+- **Deployment Platform:** Vercel (Edge Network, Node.js 20.x runtime)
+- **CI/CD:** Automated production deployments from repository master branch
+
 ---
 
 ## 📌 Overview
 
-**LingoMetric** is a modern, full-stack diagnostic language assessment application built with **Next.js 16 (App Router)**, **TypeScript**, **Supabase (PostgreSQL)**, and **Google Gemini AI**. 
+**LingoMetric** is a full-stack diagnostic language assessment application built with **Next.js 16 (App Router)**, **TypeScript**, **Supabase (PostgreSQL 15+)**, and **Google Gemini AI**.
 
 The platform evaluates English language proficiency across the four foundational skills:
 - **Reading**
@@ -14,7 +29,7 @@ The platform evaluates English language proficiency across the four foundational
 - **Writing**
 - **Speaking**
 
-LingoMetric emphasizes **grading integrity**, **transparent psychometric scoring**, and **strict zero-trust security**. It distinguishes raw assessment accuracy from overall language capability, providing provisional diagnostic CEFR ratings rather than unvalidated claims of formal certification.
+LingoMetric emphasizes **grading integrity**, **transparent psychometric scoring**, and **zero-trust database security**. It distinguishes raw assessment accuracy from overall language capability, providing provisional diagnostic CEFR ratings rather than unvalidated claims of formal certification.
 
 ---
 
@@ -23,18 +38,19 @@ LingoMetric emphasizes **grading integrity**, **transparent psychometric scoring
 ### 1. Reading Assessment
 - **Content Structure:** Evaluates vocabulary depth, grammar, sentence completion, and passage comprehension.
 - **Delivery:** Interactive question navigator with question-level timers and progress indicators.
-- **Scoring & Security:** All answers are verified server-side against canonical database answer keys in PostgreSQL. Scoring uses the total assigned question count as the denominator to prevent partial-submission score exploits.
+- **Scoring & Integrity:** Answer keys (`correct_answer`, `explanation`) are strictly removed from student-facing server component props before delivery. Scores are calculated server-side in PostgreSQL using atomic `SECURITY DEFINER` stored procedures (`submit_reading_attempt`). The scoring denominator represents all required questions to prevent partial-submission score exploits.
 - **Provisional CEFR:** Calibrated to the difficulty range of the assessed items (A2–B2 ceiling for short diagnostic modules).
 
 ### 2. Listening Assessment
 - **Content Structure:** Lecture and conversational audio scenarios with passage-level playback controls and comprehension multiple-choice questions.
-- **Audio Delivery:** Streams high-fidelity audio assets with interactive playback status and wave animation indicators.
-- **Scoring & Security:** Final scores and provisional ratings are computed via trusted atomic database RPC functions (`submit_listening_attempt`), re-verifying answer accuracy in PostgreSQL.
+- **Audio Delivery:** Streams high-fidelity audio assets with interactive playback status and wave animation indicators. Seeking/rewinding is restricted to preserve diagnostic test conditions.
+- **Scoring & Integrity:** Answer keys and transcripts are stripped from student-facing server-component payloads. Final scores and provisional ratings are computed via trusted atomic database RPC functions (`submit_listening_attempt`), re-verifying answer accuracy in PostgreSQL.
 - **Provisional CEFR:** Evaluates standard comprehension aligned with the passage baseline tier (B1 indicative).
 
 ### 3. Writing Assessment
 - **Content Structure:** Timed open-ended essay interface responding to structured diagnostic writing prompts with minimum and maximum word counts.
 - **Live Guidance:** Real-time word count monitoring, countdown timer, and auto-save capabilities.
+- **Server-Side Validation:** Server actions strictly enforce prompt-specific minimum and maximum word counts before invoking the AI, returning friendly validation messages for invalid attempts and protecting against unnecessary API consumption.
 - **AI Evaluation:** Powered by Google Gemini structured JSON generation. The system evaluates four distinct criteria (0–100 scale):
   1. *Grammatical Accuracy*
   2. *Lexical Range & Vocabulary*
@@ -61,14 +77,56 @@ LingoMetric emphasizes **grading integrity**, **transparent psychometric scoring
 | **Framework** | Next.js 16 (App Router, Server Components, Server Actions, Turbopack) |
 | **Language & Runtime** | TypeScript 5 (Strict Mode), Node.js v20+ |
 | **Database & Auth** | Supabase (PostgreSQL 15+, Row-Level Security, PL/pgSQL Stored Procedures) |
-| **Authentication** | Supabase Auth (`@supabase/ssr` cookie-based SSR session management) |
+| **Authentication** | Supabase Auth (`@supabase/ssr` cookie-based SSR session management across middleware, server components, and actions) |
 | **Storage** | Supabase Storage (`speaking-audio` private bucket, `listening-audio` public bucket) |
-| **AI Assessment** | Google Gemini API (`@google/genai` multimodal audio & structured JSON) |
+| **AI Assessment** | Google Gemini API (`@google/genai` multimodal audio understanding & structured JSON rubrics) |
 | **Styling & UI** | Tailwind CSS 4, shadcn/ui, Lucide Icons, Sonner (toasts) |
 | **State & Forms** | Zustand, React Hook Form, Zod validation |
 | **Testing** | Node.js native test runner (`node:test`, `tsx`) |
 
-*(Note: This project does not use Express or MongoDB; it leverages Next.js Server Actions and Supabase PostgreSQL.)*
+> [!NOTE]
+> This application is built entirely on the modern Next.js 16 App Router architecture paired with Supabase PostgreSQL and Server Actions. It does not use Express or MongoDB.
+
+---
+
+## 🔒 Security, Privacy & Scoring Integrity
+
+- **Cookie-based Session Authentication:** Implemented via `@supabase/ssr` with HttpOnly cookies across middleware, server components, and server actions.
+- **Zero-Trust Row-Level Security (RLS):**
+  - `public.users`: Students can view only their own profile (`auth.uid() = id`). Administrators retain legitimate student-progress visibility via non-recursive `public.is_admin()` checks. Unauthenticated users cannot read profiles or student emails.
+  - `public.attempts` and responses: Students can only insert and update responses on attempts they own that remain in `IN_PROGRESS` status.
+- **CEFR Level Immutability:** Authenticated client updates are restricted strictly to `(full_name, avatar_url)`. Ordinary users cannot modify `current_cefr_level` or `role`. Trusted database scoring functions update CEFR levels atomically via `SECURITY DEFINER`.
+- **Scoring Integrity & Props Sanitization:**
+  - Student test pages (`/test/[attemptId]` and `/test/[attemptId]/listening`) strip `correct_answer`, `explanation`, and audio `transcript` fields from server component props before rendering the client player.
+  - Final scoring is calculated in PostgreSQL by joining responses to canonical question answer keys, strictly ignoring client-supplied scores.
+  - The repository's demo questions serve diagnostic assessment purposes; formal high-stakes examination security is not claimed.
+- **Service-Role Isolation:** High-privilege database operations (such as saving writing and speaking evaluations) are strictly executed through `createServiceRoleClient()`, requiring verified server environment variables.
+- **Private Audio Retention:** Speaking recordings are stored privately in Supabase Storage and accessible only by the owning student via time-limited (1-hour) signed URLs.
+
+---
+
+## 📊 Grading Methodology & Provisional CEFR Calibration
+
+### Canonical CEFR Order
+LingoMetric strictly follows the standard European framework progression:
+$$\text{A1 (Beginner)} \rightarrow \text{A2} \rightarrow \text{B1} \rightarrow \text{B2} \rightarrow \text{C1} \rightarrow \text{C2 (Mastery)}$$
+
+### Distinguishing Raw Accuracy from Language Proficiency
+A 100% score on a short diagnostic module (e.g. 5 Reading questions or 3 Listening questions) represents **100% accuracy on the assessed items**, but **does not constitute C2 English mastery**.
+
+To ensure academic and psychometric honesty:
+1. **Accurate Raw Scoring:** Denominator accuracy is strictly preserved (e.g., 5/5 = 100% assessment accuracy).
+2. **Provisional Indicative Tiers:**
+   - **Reading Module (A2–B2 content):**
+     - $0\% - 20\% \rightarrow \text{A1}$
+     - $21\% - 45\% \rightarrow \text{A2}$
+     - $46\% - 75\% \rightarrow \text{B1}$
+     - $76\% - 100\% \rightarrow \text{B2}$ (indicative ceiling for the 5-item diagnostic screener)
+   - **Listening Module (B1 passage):**
+     - $0\% - 33\% \rightarrow \text{A1}$
+     - $34\% - 66\% \rightarrow \text{A2}$
+     - $67\% - 100\% \rightarrow \text{B1}$ (matches passage baseline)
+3. **No Unsubstantiated Certificate Claims:** Results are transparently labeled as **provisional diagnostic ratings**. Formal C1/C2 accreditation requires multi-hour standardized examinations across academic and technical registers.
 
 ---
 
@@ -86,8 +144,8 @@ LingoMetric emphasizes **grading integrity**, **transparent psychometric scoring
 Clone the repository and install dependencies:
 
 ```bash
-git clone <repository-url>
-cd linguacert-ai-main
+git clone https://github.com/ImShivBohara/lingometric.git
+cd lingometric
 npm install
 ```
 
@@ -99,7 +157,7 @@ Copy the template file to `.env.local`:
 cp .env.example .env.local
 ```
 
-Configure the following variable names in `.env.local` (never commit real values):
+Configure the following variable names in `.env.local` (never commit real credentials):
 
 ```env
 # Supabase Configuration
@@ -119,11 +177,12 @@ GEMINI_MODEL=gemini-2.5-flash
 
 ---
 
-## 🗄 Supabase Schema & Storage Setup
+## 🗄 Fresh Supabase Setup Instructions
 
-### Database Migrations
+Follow these reproducible steps to set up a fresh Supabase project from scratch:
 
-Apply the migration files located in `supabase/migrations/` in sequential timestamp order:
+### Step 1: Database Migrations
+Execute all SQL migration scripts in `supabase/migrations/` in sequential timestamp order using the Supabase SQL Editor or Supabase CLI:
 
 1. `20260606000000_init_schema.sql` — Base tables (`users`, `tests`, `sections`, `questions`, `attempts`, `responses`).
 2. `20260606010000_seed_reading_questions.sql` — Reading question bank items.
@@ -140,107 +199,73 @@ Apply the migration files located in `supabase/migrations/` in sequential timest
 13. `20260608010000_attempt_assessment_identity.sql` — Explicit `assessment_type` enum on attempts.
 14. `20260608020000_attempt_security_and_constraints.sql` — Trusted RPC submission functions, RLS tightening, and anti-forgery guards.
 15. `20260608030000_provisional_cefr_calibration.sql` — Calibrated provisional CEFR mapping for short screening modules.
+16. `20260608040000_audit_security_fixes.sql` — Non-recursive user profile RLS, CEFR immutability, sanitized props, and PostgREST tightening.
 
-### Supabase Storage Buckets
-
-Configure two storage buckets in the Supabase Dashboard:
+### Step 2: Storage Buckets Configuration
+In your Supabase Dashboard, navigate to **Storage** and configure the two required buckets:
 
 1. **`listening-audio`** (Public):
-   - Stores listening passage MP3 audio files.
-   - Public read access enabled.
+   - Toggle **Public bucket** to `ON`.
+   - Upload the sample listening passage audio file located in this repository at:
+     `docs/archive/assets/renewable_energy.mp3`
 2. **`speaking-audio`** (Private):
-   - Stores uploaded student microphone recordings (`userId/attemptId.webm`).
-   - Private bucket with RLS: Users can insert and read only their own recordings.
-   - Student results pages generate temporary (1-hour expiry) signed URLs for private audio playback.
+   - Leave **Public bucket** `OFF`.
+   - Configure RLS policies so authenticated students can upload and read their own audio files (`(storage.foldername(name))[1] = auth.uid()::text`).
 
----
+### Step 3: Configure Listening Audio URL
+Migration 4 (`20260606030000_listening_schema.sql`) seeded a bootstrap reference URL for the sample passage. In your fresh Supabase project, update the audio URL to point to your project's storage bucket:
 
-## 🤖 AI Integration Architecture
+```sql
+UPDATE public.listening_passages
+SET audio_url = 'https://<your-project-id>.supabase.co/storage/v1/object/public/listening-audio/renewable_energy.mp3'
+WHERE id = 'd4d70c5e-d63c-4384-a327-ee556c77d890';
+```
 
-AI evaluation is performed using Google's `@google/genai` SDK:
+*(Alternatively, log in as an administrator, navigate to `/admin/listening`, click **Edit** on the Renewable Energy passage, and update the **Audio File URL** field directly in the UI.)*
 
-- **Model Hierarchy & Fallback Chain:**
-  1. `gemini-2.5-flash` (Primary default)
-  2. `gemini-flash-latest` (First fallback)
-  3. `gemini-2.0-flash` (Second fallback)
-- **Resilience:** Automatic exponential backoff retries (delays: 2s, 5s, 10s) protect against transient rate-limits.
-- **Multimodal Speech Processing:** Raw audio base64 buffers are sent directly to the model for native acoustic understanding, avoiding the loss of prosodic and phonological information that occurs with separate speech-to-text pipelines.
-- **Structured Schemas:** All evaluations enforce strict JSON Schema specifications returning deterministic score fields, transcripts, and structured feedback arrays.
-
----
-
-## 🔒 Security, Authentication & Privacy
-
-- **Cookie-based Session Authentication:** Implemented via `@supabase/ssr` across middleware, server components, and server actions.
-- **Zero-Trust Row-Level Security (RLS):** Enabled on all tables. Students can only insert and update responses on attempts they own that remain in `IN_PROGRESS` status.
-- **Service-Role Isolation:** High-privilege database operations (such as saving writing and speaking evaluations) are strictly executed through `createServiceRoleClient()`, requiring verified server environment variables.
-- **Anti-Tampering Trigger:** Database triggers prevent client overrides on `attempts.status`, `final_score`, `cefr_level`, and `submitted_at`.
-- **Private Audio Retention:** Speaking recordings are stored privately and accessible only by the creator via time-limited signed URLs.
-
----
-
-## 📊 Grading Methodology & Provisional CEFR Calibration
-
-### Canonical CEFR Order
-LingoMetric strictly follows the standard European framework progression:
-$$\text{A1 (Beginner)} \rightarrow \text{A2} \rightarrow \text{B1} \rightarrow \text{B2} \rightarrow \text{C1} \rightarrow \text{C2 (Mastery)}$$
-
-### Distinguishing Raw Accuracy from Language Proficiency
-A 100% score on a short diagnostic test (e.g. 5 Reading questions or 3 Listening questions) represents **100% accuracy on the assessed items**, but **does not constitute C2 English mastery**.
-
-To ensure academic and psychometric honesty:
-1. **Accurate Raw Scoring:** Denominator accuracy is strictly preserved (e.g., 5/5 = 100% assessment accuracy).
-2. **Provisional Indicative Tiers:**
-   - **Reading Module (A2–B2 content):**
-     - $0\% - 20\% \rightarrow \text{A1}$
-     - $21\% - 45\% \rightarrow \text{A2}$
-     - $46\% - 75\% \rightarrow \text{B1}$
-     - $76\% - 100\% \rightarrow \text{B2}$ (indicative ceiling for the 5-item diagnostic screener)
-   - **Listening Module (B1 passage):**
-     - $0\% - 33\% \rightarrow \text{A1}$
-     - $34\% - 66\% \rightarrow \text{A2}$
-     - $67\% - 100\% \rightarrow \text{B1}$ (matches passage baseline)
-3. **No Unsubstantiated Certificate Claims:** Results are transparently labeled as **provisional diagnostic ratings**. Formal C1/C2 accreditation requires multi-hour standardized examinations across academic and technical registers.
+> [!NOTE]
+> Current production audio settings in existing deployed environments are preserved automatically.
 
 ---
 
 ## 🧪 Testing & Verification
 
-Run the full verification suite locally:
+Run the comprehensive test and linting suite locally:
 
 ```bash
 # 1. ESLint verification
 npm run lint
 
-# 2. Phase 1 & Security Test Suite
-npx tsx --test tests/phase1.test.ts
+# 2. Automated test suite (Phase 1, Phase 2 & Audit Fixes)
+npm test
 
-# 3. Phase 2 Grading & Identity Test Suite
-npx tsx --test tests/phase2.test.ts
-
-# 4. Production Build Verification
+# 3. Next.js production build verification
 npm run build
 ```
 
 ---
 
-## 🌐 Deployment Readiness (Vercel)
+## 🌐 Production Deployment (Vercel)
 
-The application is pre-configured for Vercel deployment:
-- **Build Command:** `npm run build`
-- **Output Directory:** `.next`
-- **Install Command:** `npm install`
-- **Required Environment Variables in Vercel Dashboard:**
-  - `NEXT_PUBLIC_SUPABASE_URL`
-  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-  - `SUPABASE_SERVICE_ROLE_KEY`
-  - `GEMINI_API_KEY`
-  - `GEMINI_MODEL` (optional, defaults to `gemini-2.5-flash`)
+LingoMetric is hosted on Vercel. For fresh deployments or environment updates:
 
-*(Note: Per safety requirements, remote deployment has not been executed; review and configure environment variables in your Vercel project when ready to deploy.)*
+1. Connect the GitHub repository `https://github.com/ImShivBohara/lingometric` to Vercel.
+2. Ensure the following production environment variables are configured in the **Vercel Dashboard -> Project Settings -> Environment Variables**:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `GEMINI_API_KEY`
+   - `GEMINI_MODEL` (e.g. `gemini-2.5-flash` or `gemini-3.8-flash`)
+3. The build pipeline uses the standard Next.js configuration:
+   - **Framework Preset:** Next.js
+   - **Build Command:** `next build` (`npm run build`)
+   - **Output Directory:** `.next`
+   - **Install Command:** `npm install`
 
 ---
 
-## 📄 License
+## 📄 License & Academic Attribution
 
-This project is licensed under the MIT License for educational and institutional evaluation purposes.
+This project is submitted as an academic final project for **Term 5 MERN** at **Scaler School of Technology (SST)**.
+
+**Proprietary / Academic Submission** — All rights reserved. Created for educational assessment and evaluation purposes. Not licensed for unauthorized public redistribution.

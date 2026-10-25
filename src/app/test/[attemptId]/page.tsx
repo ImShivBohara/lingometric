@@ -67,8 +67,6 @@ export default async function TestAttemptPage({ params }: PageProps) {
         difficulty_level,
         question_text,
         options,
-        correct_answer,
-        explanation,
         category,
         estimated_time_seconds,
         created_at
@@ -88,8 +86,6 @@ export default async function TestAttemptPage({ params }: PageProps) {
       difficulty_level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2'
       question_text: string
       options: string[] | Record<string, unknown> | null
-      correct_answer: string
-      explanation: string | null
       category: string
       estimated_time_seconds: number
       created_at: string;
@@ -106,7 +102,7 @@ export default async function TestAttemptPage({ params }: PageProps) {
     // 2. Fallback to existing section-based retrieval if no custom assignments exist
     const { data: fallbackQuestions, error: fallbackError } = await supabase
       .from('questions')
-      .select('*')
+      .select('id, section_id, question_type, difficulty_level, question_text, options, category, estimated_time_seconds, created_at')
       .eq('section_id', readingSection.id)
       .order('created_at', { ascending: true })
 

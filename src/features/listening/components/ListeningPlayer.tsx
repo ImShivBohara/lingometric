@@ -24,7 +24,7 @@ export interface ListeningQuestion {
   passage_id: string
   question_text: string
   options: unknown
-  correct_answer: string
+  correct_answer?: string
   explanation?: string
 }
 

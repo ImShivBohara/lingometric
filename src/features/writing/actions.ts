@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { evaluateEssay } from '@/lib/gemini'
 import { assertModifiableAttempt, getOwnedAttempt } from '@/features/testing/attemptAccess'
 import { createServiceRoleClient } from '@/lib/supabase/serviceRole'
+import { validateWritingWordCount } from './validation'
 
 /**
  * Server action to submit an essay response and trigger AI scoring/evaluation.
@@ -29,7 +30,7 @@ export async function submitEssayAction(
   // 1. Fetch writing prompt constraints for validation
   const { data: prompt, error: promptError } = await supabase
     .from('writing_prompts')
-    .select('id, prompt_text, section_id')
+    .select('id, prompt_text, section_id, minimum_words, maximum_words')
     .eq('id', promptId)
     .single()
 
@@ -51,15 +52,24 @@ export async function submitEssayAction(
     return { success: false, error: 'Writing prompt does not belong to this assessment' }
   }
 
-  // Calculate word count
-  const wordCount = essayText.trim() === '' ? 0 : essayText.trim().split(/\s+/).length
-  console.log(`Submitting essay with ${wordCount} words for attempt ${attemptId}`)
+  // 3. Enforce word count constraints server-side before invoking AI evaluation
+  const minWords = prompt.minimum_words ?? 50
+  const maxWords = prompt.maximum_words ?? 500
+  const validation = validateWritingWordCount(essayText, minWords, maxWords)
+  console.log(`Submitting essay with ${validation.wordCount} words (allowed: ${minWords}-${maxWords}) for attempt ${attemptId}`)
+
+  if (!validation.valid) {
+    return {
+      success: false,
+      error: validation.error || 'Essay does not meet the length requirements.',
+    }
+  }
 
   try {
-    // 3. Trigger Gemini Evaluation
+    // 4. Trigger Gemini Evaluation
     const evaluation = await evaluateEssay(prompt.prompt_text, essayText)
 
-    // 4. Save evaluation and finalize attempt via trusted server-only RPC using service role client
+    // 5. Save evaluation and finalize attempt via trusted server-only RPC using service role client
     const serviceClient = createServiceRoleClient()
     const { error: rpcError } = await serviceClient.rpc('submit_writing_evaluation', {
       p_attempt_id: attemptId,

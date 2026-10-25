@@ -44,12 +44,14 @@ export interface Question {
   difficulty_level: DifficultyTier;
   question_text: string;
   options: string[] | Record<string, unknown> | null;
-  correct_answer: string;
-  explanation: string | null;
+  correct_answer?: string;
+  explanation?: string | null;
   estimated_time_seconds: number;
   category: string;
   created_at: string;
 }
+
+export type StudentQuestion = Omit<Question, 'correct_answer' | 'explanation'>;
 
 export interface AudioFile {
   id: string;
