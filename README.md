@@ -19,6 +19,14 @@ LingoMetric is deployed and operational on Vercel:
 
 ---
 
+## 🎬 Project Demo Video
+
+Watch the complete **3-minute demonstration** of LingoMetric:
+
+**[▶ Watch LingoMetric Project Demo](https://drive.google.com/file/d/1D9KZfjeS6iKxRn_I_sT3ZD7YOxHa3JuY/view?usp=sharing)**
+
+The demonstration covers user authentication, the student dashboard, the unified Reading, Listening, Writing, and Speaking assessments, Google Gemini-powered AI feedback, combined results, and assessment history.
+
 ## 📌 Overview
 
 **LingoMetric** is a full-stack diagnostic language assessment application built with **Next.js 16 (App Router)**, **TypeScript**, **Supabase (PostgreSQL 15+)**, and **Google Gemini AI**.
