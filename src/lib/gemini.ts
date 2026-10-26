@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai'
 
-// Configurable model name, defaulting to gemini-2.5-flash
-export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+// Configurable primary model, with a supported Flash-Lite fallback.
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash'
 
 export interface EssayEvaluation {
   grammar_score: number
@@ -21,6 +21,18 @@ export interface EssayEvaluation {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// Only transient API failures warrant retries. A 404 (retired model),
+// 400 (invalid input), or 401/403 (credentials/permissions) cannot be
+// fixed by repeatedly sending the same request.
+function isTransientGeminiError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const status = (error as { status?: number | string }).status
+  const code = typeof status === 'number' ? status : Number(status)
+  return [408, 429, 500, 502, 503, 504].includes(code)
+}
+
+const evaluationModels = () => [...new Set([GEMINI_MODEL, 'gemini-3.5-flash-lite'])]
+
 /**
  * Executes a generateContent call with exponential retry logic.
  */
@@ -31,7 +43,7 @@ async function tryGenerate(
   systemInstruction: string,
   schema: Record<string, unknown>
 ) {
-  const delays = [2000, 5000, 10000] // 2s, 5s, 10s delays
+  const delays = [1500, 3500] // Capped transient retries; avoid very long submissions
 
   for (let attempt = 0; attempt <= delays.length; attempt++) {
     try {
@@ -51,9 +63,9 @@ async function tryGenerate(
     } catch (err: unknown) {
       console.error(`Attempt ${attempt + 1} with model ${model} failed. Error:`, err)
       
-      // If we still have retries remaining, sleep and try again
-      if (attempt < delays.length) {
-        const delay = delays[attempt]
+      // Never retry permanent failures such as a missing/retired model (404).
+      if (attempt < delays.length && isTransientGeminiError(err)) {
+        const delay = delays[attempt] + Math.floor(Math.random() * 400)
         console.log(`Waiting ${delay / 1000}s before next retry...`)
         await sleep(delay)
       } else {
@@ -188,12 +200,9 @@ export async function evaluateEssay(
     ]
   }
 
-  // Models to try in sequence: Primary model first, then fallback to gemini-flash-latest and gemini-2.0-flash
-  const modelsToTry = [
-    GEMINI_MODEL,
-    'gemini-flash-latest',
-    'gemini-2.0-flash'
-  ]
+  // Prefer the configured model. Flash-Lite is a supported fallback for
+  // text + JSON schema; never call retired Gemini 2.0 models.
+  const modelsToTry = evaluationModels()
   let lastError: unknown = null
 
   for (const model of modelsToTry) {
@@ -335,12 +344,8 @@ export async function evaluateSpeech(
     ]
   }
 
-  // We reuse the same model fallback chain
-  const modelsToTry = [
-    GEMINI_MODEL,
-    'gemini-flash-latest',
-    'gemini-2.0-flash'
-  ]
+  // Flash-Lite supports audio input and structured output too.
+  const modelsToTry = evaluationModels()
   let lastError: unknown = null
 
   for (const model of modelsToTry) {
