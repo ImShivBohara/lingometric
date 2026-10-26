@@ -70,6 +70,25 @@ LingoMetric emphasizes **grading integrity**, **transparent psychometric scoring
 
 ---
 
+## Full English Proficiency Assessment
+
+LingoMetric allows users to complete all four English language skills in one integrated assessment session.
+
+**Assessment flow:** Reading → Listening → Writing → Speaking.
+
+- **Unified Assessment:** Four skill assessments are grouped into one session.
+- **Resume Progress:** Users can return to an unfinished assessment without losing their saved progress.
+- **Combined Scoring:** Each skill contributes 25% to the final score. The combined score is the average of the four individual scores.
+- **Detailed Results:** After completing all four sections, users can view their overall score, individual skill scores, feedback, and indicative CEFR levels.
+- **Assessment History:** Completed and unfinished sessions appear in the student dashboard. Previous independent assessment records are preserved.
+- **Admin Management:** Authorized administrators can manage assessment content, review student progress, and upload listening audio.
+
+**Note:** CEFR levels are provisional diagnostic estimates, not official language proficiency certifications.
+
+### Architecture
+
+The application uses Next.js for the user interface and server-side actions, Supabase PostgreSQL for persistent assessment data, Supabase Authentication for account management, Supabase Storage for audio files, and Google Gemini for AI-based Writing and Speaking evaluation. The application is deployed on Vercel.
+
 ## 🛠 Technology Stack
 
 | Layer | Technologies |
@@ -200,6 +219,11 @@ Execute all SQL migration scripts in `supabase/migrations/` in sequential timest
 14. `20260608020000_attempt_security_and_constraints.sql` — Trusted RPC submission functions, RLS tightening, and anti-forgery guards.
 15. `20260608030000_provisional_cefr_calibration.sql` — Calibrated provisional CEFR mapping for short screening modules.
 16. `20260608040000_audit_security_fixes.sql` — Non-recursive user profile RLS, CEFR immutability, sanitized props, and PostgREST tightening.
+17. `20261025010000_full_assessment_sessions.sql`
+    — Links Reading, Listening, Writing, and Speaking into unified assessment sessions.
+
+18. `20261025020000_listening_audio_storage.sql`
+    — Configures public listening audio playback and admin upload permissions.
 
 ### Step 2: Storage Buckets Configuration
 In your Supabase Dashboard, navigate to **Storage** and configure the two required buckets:
