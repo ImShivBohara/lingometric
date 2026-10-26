@@ -6,7 +6,7 @@ import { createTestAttemptAction } from '@/features/testing/actions'
 import { highestSubmittedScore, resolveAttemptSkill } from '@/features/testing/attemptIdentity'
 import Link from 'next/link'
 import { groupAssessmentAttempts, summarizeSession } from '@/features/testing/assessmentSession'
-import AttemptsHistory from './components/AttemptsHistory'
+import AttemptsHistory, { ExtendedAttempt } from './components/AttemptsHistory'
 import { 
   Trophy, 
   Award, 
@@ -30,14 +30,38 @@ export default async function DashboardPage() {
     return null
   }
 
-  const profile = await getUserProfile(user.id)
-
-  // Fetch real attempts from database with their respective evaluations and response evidence
-  const { data: attempts } = await supabase
-    .from('attempts')
-    .select('*, tests(*), writing_evaluations(*), listening_responses(id), speaking_evaluations(*), responses(id)')
-    .eq('user_id', user.id)
-    .order('started_at', { ascending: false })
+  const [profile, attemptsResult] = await Promise.all([
+    getUserProfile(user.id),
+    supabase
+      .from('attempts')
+      .select(`
+        id,
+        user_id,
+        test_id,
+        session_id,
+        started_at,
+        submitted_at,
+        final_score,
+        cefr_level,
+        status,
+        assessment_type,
+        tests (id, title),
+        writing_evaluations (
+          id, attempt_id, essay_text, grammar_score, vocabulary_score,
+          coherence_score, fluency_score, overall_score, cefr_level, feedback
+        ),
+        listening_responses (id),
+        speaking_evaluations (
+          id, attempt_id, audio_url, transcript, pronunciation_score,
+          grammar_score, fluency_score, vocabulary_score, overall_score,
+          cefr_level, feedback
+        ),
+        responses (id)
+      `)
+      .eq('user_id', user.id)
+      .order('started_at', { ascending: false }),
+  ])
+  const attempts = attemptsResult.data as unknown as ExtendedAttempt[] | null
 
   const userDisplayName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Learner'
 

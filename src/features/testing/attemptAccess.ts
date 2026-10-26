@@ -21,11 +21,10 @@ export async function getOwnedAttempt(attemptId: string): Promise<
   | { success: false; error: string }
 > {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: claimsData } = await supabase.auth.getClaims()
+  const userId = claimsData?.claims?.sub
 
-  if (!user) {
+  if (!userId) {
     return { success: false, error: 'Authentication required' }
   }
 
@@ -33,7 +32,7 @@ export async function getOwnedAttempt(attemptId: string): Promise<
     .from('attempts')
     .select('*, responses(id), listening_responses(id), writing_evaluations(id), speaking_evaluations(id)')
     .eq('id', attemptId)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .maybeSingle()
 
   if (error || !attempt) {
@@ -44,7 +43,7 @@ export async function getOwnedAttempt(attemptId: string): Promise<
     success: true,
     data: {
       supabase,
-      userId: user.id,
+      userId,
       attempt: attempt as Attempt & AttemptSkillEvidence,
     },
   }

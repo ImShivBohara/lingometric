@@ -34,11 +34,10 @@ export async function createTestAttemptAction(
 
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: claimsData } = await supabase.auth.getClaims()
+  const userId = claimsData?.claims?.sub
 
-  if (!user) {
+  if (!userId) {
     throw new Error('Authentication required')
   }
 
@@ -46,7 +45,7 @@ export async function createTestAttemptAction(
   const { data: existingAttempt } = await supabase
     .from('attempts')
     .select('id, assessment_type')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .eq('test_id', testId)
     .eq('status', 'IN_PROGRESS')
     .eq('assessment_type', assessmentType)
@@ -63,7 +62,7 @@ export async function createTestAttemptAction(
   const { data: attempt, error } = await supabase
     .from('attempts')
     .insert({
-      user_id: user.id,
+      user_id: userId,
       test_id: testId,
       status: 'IN_PROGRESS',
       assessment_type: assessmentType,
@@ -267,12 +266,13 @@ export async function discardAttemptAction(attemptId: string) {
 export async function createFullAssessmentAction(testId: string) {
   if (!VALID_TEST_ID.test(testId)) throw new Error('A valid test identifier is required')
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const { data: claimsData } = await supabase.auth.getClaims()
+  const userId = claimsData?.claims?.sub
+  if (!userId) redirect('/auth/login')
   const { data: sessionId, error } = await supabase.rpc('start_full_assessment', { p_test_id: testId })
   if (error || !sessionId) throw new Error(error?.message || 'Could not start assessment')
   const { data: sections, error: sectionsError } = await supabase.from('attempts')
-    .select('*').eq('session_id', sessionId).eq('user_id', user.id)
+    .select('*').eq('session_id', sessionId).eq('user_id', userId)
   if (sectionsError || !sections?.length) throw new Error('Could not load assessment sections')
   const { nextPath } = summarizeSession(sections)
   revalidatePath('/dashboard')
